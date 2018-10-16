@@ -4,6 +4,7 @@ import datetime
 import matplotlib.pyplot as plt
 import os
 import pickle
+import time
 
 
 def load_data(coin_list, from_date, to_date):
@@ -57,23 +58,33 @@ def load_google_trends(coin, from_date, to_date, sample_interval=1,
 
         cached_file_path = os.path.join(os.path.pardir, 'cache',
                                         cached_file_name)
+
         if os.path.isfile(cached_file_path):
             with open(cached_file_path, 'rb') as file:
                 print('LOADING FROM CACHE: ', coin, timeframe)
                 interval_df = pickle.load(file)
-        else:
-            try:
-                print('DOWNLOADING: ', coin, timeframe)
-                pytrend.build_payload([coin], cat=cat, timeframe=timeframe)
-                interval_df = pytrend.interest_over_time()
-                interval_df['datetime'] = pd.to_datetime(interval_df.index)
-                interval_df = interval_df.set_index('datetime')
-                with open(cached_file_path, 'wb') as file:
-                    pickle.dump(interval_df, file)
-            except Exception as error:
-                print('FAILED: ', coin, timeframe, error)
 
-                pass
+        if ((not os.path.isfile(cached_file_path)) or
+                interval_df.index[-1] < interval_end):
+            while True:
+                try:
+                    print('DOWNLOADING: ', coin, timeframe)
+                    pytrend.build_payload([coin], cat=cat, timeframe=timeframe)
+                    interval_df = pytrend.interest_over_time()
+                    interval_df['datetime'] = pd.to_datetime(interval_df.index)
+                    interval_df = interval_df.set_index('datetime')
+                    with open(cached_file_path, 'wb') as file:
+                        pickle.dump(interval_df, file)
+                        break
+
+                except Exception as error:
+                    if int(str(error)[-4:-1]) == 429:
+                        print('QUERY LIMIT REACHED: waiting {0} '
+                              'seconds'.format(sleeptime))
+                        time.sleep(sleeptime)
+                    else:
+                        print('FAILED: ', coin, timeframe, error)
+                        break
 
         if len(coin_df) > 0:
             if coin_df.index[-1] - coin_df.index[0] > overlap_interval:
@@ -92,6 +103,7 @@ def load_google_trends(coin, from_date, to_date, sample_interval=1,
                                                   overlap_interval):])
 
     return coin_df
+
 
 if __name__ == '__main__':
     coin_list = {'BTC': 'bitcoin',
