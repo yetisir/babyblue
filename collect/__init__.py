@@ -88,6 +88,9 @@ class DataCollector(object):
             # concatenate the interval to the dataframe
             self.keyword_df = self.keyword_df.append(self.interval_df)
 
+        # chop dataframe to originally requested size
+        self.keyword_df = self.keyword_df.loc[self.start_date:self.end_date]
+
     def cache_file_path(self):
         # compile cache file name
         fmt_str = '{collector}_{keyword}_{start_date}_to_{end_date}.pkl'
