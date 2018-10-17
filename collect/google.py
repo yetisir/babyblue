@@ -57,6 +57,6 @@ class GoogleTrends(DataCollector):
             print('QUERY LIMIT REACHED: waiting {0} '
                   'seconds'.format(self.sleep))
             time.sleep(self.sleep)
-            self.queery()
+            self.query()
         else:
             raise
