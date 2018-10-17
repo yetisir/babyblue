@@ -18,8 +18,8 @@ class DataCollector(object):
         self.end_date = end_date
 
         # convert times to datetime timedelta objects
-        self.sample_interval = datetime.timedelta(days=sample_interval)
-        self.overlap_interval = datetime.timedelta(days=overlap_interval)
+        self.sample_interval = pd.to_timedelta(sample_interval)
+        self.overlap_interval = pd.to_timedelta(overlap_interval)
 
         # defining query limits based on the epoch and interval so that they
         # are consistent regardless of the specified start date
@@ -68,11 +68,9 @@ class DataCollector(object):
                                              self.interval_df.index[-2])
                     current_timedelta = (datetime.datetime.utcnow() -
                                          self.interval_df.index[-1])
-                    print(datetime.datetime.utcnow())
-                    print(self.interval_df.index[-1])
-                    print(current_timedelta)
-                    print(interval_df_timedelta)
-                    if current_timedelta < interval_df_timedelta:
+
+                    # if data in cached file is recent, no need to re-download
+                    if current_timedelta < interval_df_timedelta * 2:
                         complete_interval = True
 
             # download the interval again if it does not exist or is incomplete
@@ -130,7 +128,6 @@ class DataCollector(object):
             print('LOADING FROM CACHE: ', self.keyword, self.interval_start,
                   self.interval_end)
             data = pickle.load(file)
-            data.columns = map(str.lower, data.columns)
 
         # return unpickled dataframe for interval
         return data
