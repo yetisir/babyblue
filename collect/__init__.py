@@ -2,6 +2,7 @@ import datetime
 import os
 import pickle
 import time
+import pandas as pd
 
 
 class DataCollector(object):
@@ -13,10 +14,10 @@ class DataCollector(object):
         self.keyword = keyword
         self.time_format = time_format
         self.wait = wait
+        self.start_date = start_date
+        self.end_date = end_date
 
-        # convert dates and times to datetime objects
-        self.start_date = datetime.datetime(start_date)
-        self.end_date = datetime.datetime(end_date)
+        # convert times to datetime timedelta objects
         self.sample_interval = datetime.timedelta(days=sample_interval)
         self.overlap_interval = datetime.timedelta(days=overlap_interval)
 
@@ -59,8 +60,8 @@ class DataCollector(object):
             complete_interval = True
             cache_file = self.cache_file_path()
             if os.path.isfile(cache_file):
-                interval_df = self.load_cache()
-                if interval_df.index[-1] < self.interval_end:
+                self.interval_df = self.load_cache()
+                if self.interval_df.index[-1] < self.interval_end:
                     complete_interval = False
 
             # download the interval again if it does not exist or is incomplete
@@ -71,16 +72,12 @@ class DataCollector(object):
                           self.interval_end)
 
                     # query method is defined by the child class
-                    self.query()
+                    self.interval_df = self.query()
                     self.dump_cache()
                     time.sleep(self.wait)
 
                 # catch the exception and pass to child class
                 except Exception as error:
-                    # TODO replace with more appropriate logging method
-                    print('FAILED: ', self.keyword, self.interval_start,
-                          self.interval_end)
-
                     # handle_query_error method is defined by the child class
                     self.handle_query_error(error)
 
@@ -96,13 +93,17 @@ class DataCollector(object):
         fmt_str = '{collector}_{keyword}_{start_date}_to_{end_date}.pkl'
         cached_file_name = fmt_str.format(keyword=self.keyword,
                                           start_date=self.interval_start_str,
-                                          end_date=self.interval_end_str)
+                                          end_date=self.interval_end_str,
+                                          collector=self.collector_name)
 
         # return the full path to the cache file
-        return os.path.join(os.path.pardir, 'cache', 'collector',
-                            cached_file_name)
+        return os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                            os.path.pardir,
+                                            'cache',
+                                            self.collector_name,
+                                            cached_file_name))
 
-    def load_cache(self, start_date, end_date):
+    def load_cache(self):
         # get cache file name
         cache_file = self.cache_file_path()
 
@@ -116,7 +117,7 @@ class DataCollector(object):
         # return unpickled dataframe for interval
         return data
 
-    def dump_cache(self, start_date, end_date):
+    def dump_cache(self):
         # get cache file name
         cache_file = self.cache_file_path()
 
@@ -157,3 +158,13 @@ class DataCollector(object):
         # chop off overlapping data from new interval
         self.interval_df = self.interval_df.loc[(self.interval_start +
                                                  self.overlap_interval):]
+
+    def get_dataframe(self):
+
+        # return the dataframe with the collected data
+        return self.keyword_df
+
+
+class DataAssimilator(object):
+    def __init__(self):
+        pass

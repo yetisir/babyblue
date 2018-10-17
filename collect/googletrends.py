@@ -7,6 +7,8 @@ import pickle
 import time
 
 
+
+
 def load_data(coin_list, from_date, to_date):
     google_trends_dfs = []
 
@@ -20,6 +22,8 @@ def load_data(coin_list, from_date, to_date):
             google_trends_dfs.append(coin_trends)
 
     return pd.concat(google_trends_dfs, axis='columns')
+
+
 
 
 def load_google_trends(coin, from_date, to_date, sample_interval=1,
@@ -104,28 +108,3 @@ def load_google_trends(coin, from_date, to_date, sample_interval=1,
                                                   overlap_interval):])
 
     return coin_df
-
-
-if __name__ == '__main__':
-    coin_list = {'BTC': 'bitcoin',
-                 'ETH': 'ethereum',
-                 'XRP': 'ripple',
-                 'BCH': 'bitcoin cash',
-                 'EOS': 'eos',
-                 'XLM': 'stellar',
-                 'LTC': 'litecoin',
-                 'ADA': 'cardano',
-                 # 'XMR': 'monero',
-                 'TRX': 'tron',
-                 'MIOTA': 'iota',
-                 'DASH': 'dash',
-                 'BNB': 'binance',
-                 'NEO': 'neo'}
-
-    start_date = datetime.datetime(year=2017, month=1, day=1, hour=0)
-    end_date = datetime.datetime.today()
-
-    data = load_data(coin_list, start_date, end_date)
-    print(data.to_string())
-    plt.plot(data)
-    plt.show()
