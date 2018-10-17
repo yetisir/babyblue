@@ -23,7 +23,7 @@ def load_data(coin_list, from_date, to_date):
 
 
 def load_google_trends(coin, from_date, to_date, sample_interval=1,
-                       overlap_interval=1, cat=0, sleeptime=60):
+                       overlap_interval=1, cat=0, wait=1, sleeptime=60):
 
     sample_interval = int(sample_interval)
     if sample_interval + overlap_interval > 7:
@@ -75,7 +75,8 @@ def load_google_trends(coin, from_date, to_date, sample_interval=1,
                     interval_df = interval_df.set_index('datetime')
                     with open(cached_file_path, 'wb') as file:
                         pickle.dump(interval_df, file)
-                        break
+                    time.sleep(wait)
+                    break
 
                 except Exception as error:
                     if int(str(error)[-4:-1]) == 429:
