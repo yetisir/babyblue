@@ -6,7 +6,7 @@ import time
 
 class GoogleTrends(DataCollector):
     def __init__(self, keyword, start_date, end_date, category=0,
-                 sample_interval=1, overlap_interval=1, wait=1,
+                 sample_interval=2, overlap_interval=1, wait=1,
                  sleep=60, time_format='%Y-%m-%dT%H'):
 
         super().__init__(collector_name='google-trends',
@@ -28,9 +28,14 @@ class GoogleTrends(DataCollector):
         self.pytrend.build_payload([self.keyword], cat=self.category,
                                    timeframe=timeframe)
         interval_df = self.pytrend.interest_over_time()
+        interval_df = interval_df.shift(periods=1)
+        print(interval_df.tail())
         interval_df['datetime'] = pd.to_datetime(interval_df.index)
         interval_df = interval_df.set_index('datetime')
-
+        interval_df['isPartial'] = interval_df['isPartial'].astype(str)
+        interval_df = interval_df.loc[
+            interval_df.isPartial.str.contains('False')]
+        interval_df = interval_df.drop('isPartial', axis='columns')
         return interval_df
 
     def handle_query_error(self, error):
@@ -43,8 +48,9 @@ class GoogleTrends(DataCollector):
             # TODO replace with more appropriate logging method
             print('FAILED: ', self.keyword, self.interval_start,
                   self.interval_end)
+            raise
 
     def get_dataframe(self):
 
         # return the dataframe with the collected data
-        return self.keyword_df.drop('isPartial', axis='columns')
+        return self.keyword_df

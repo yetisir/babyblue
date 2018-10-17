@@ -64,6 +64,17 @@ class DataCollector(object):
                 if self.interval_df.index[-1] < self.interval_end:
                     complete_interval = False
 
+                    interval_df_timedelta = (self.interval_df.index[-1] -
+                                             self.interval_df.index[-2])
+                    current_timedelta = (datetime.datetime.utcnow() -
+                                         self.interval_df.index[-1])
+                    print(datetime.datetime.utcnow())
+                    print(self.interval_df.index[-1])
+                    print(current_timedelta)
+                    print(interval_df_timedelta)
+                    if current_timedelta < interval_df_timedelta:
+                        complete_interval = True
+
             # download the interval again if it does not exist or is incomplete
             if not complete_interval or not os.path.isfile(cache_file):
                 try:
@@ -82,11 +93,14 @@ class DataCollector(object):
                     self.handle_query_error(error)
 
             # merge data if specified and not the first interval
-            if self.overlap_interval and len(self.keyword_df) > 0:
+            if self.overlap_interval and len(self.keyword_df):
                 self.merge_overlap()
-
             # concatenate the interval to the dataframe
-            self.keyword_df = self.keyword_df.append(self.interval_df)
+            if len(self.keyword_df):
+                self.keyword_df = self.keyword_df.append(self.interval_df,
+                                                         sort=False)
+            else:
+                self.keyword_df = self.interval_df
 
         # chop dataframe to originally requested size
         self.keyword_df = self.keyword_df.loc[self.start_date:self.end_date]
@@ -116,6 +130,7 @@ class DataCollector(object):
             print('LOADING FROM CACHE: ', self.keyword, self.interval_start,
                   self.interval_end)
             data = pickle.load(file)
+            data.columns = map(str.lower, data.columns)
 
         # return unpickled dataframe for interval
         return data
@@ -123,6 +138,9 @@ class DataCollector(object):
     def dump_cache(self):
         # get cache file name
         cache_file = self.cache_file_path()
+
+        # ensure the directory exists
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
 
         # pickle interval dataframe
         with open(cache_file, 'wb') as file:
@@ -161,13 +179,9 @@ class DataCollector(object):
         # chop off overlapping data from new interval
         self.interval_df = self.interval_df.loc[(self.interval_start +
                                                  self.overlap_interval):]
+        self.interval_df = self.interval_df.loc[self.interval_df.index[1]:]
 
     def get_dataframe(self):
 
         # return the dataframe with the collected data
         return self.keyword_df
-
-
-class DataAssimilator(object):
-    def __init__(self):
-        pass
