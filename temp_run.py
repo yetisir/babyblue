@@ -10,17 +10,17 @@ if __name__ == '__main__':
                  'BCH': 'bitcoin cash',
                  'EOS': 'eos',
                  'XLM': 'stellar',
-                 'LTC': 'litecoin',
-                 'ADA': 'cardano',
-                 'XMR': 'monero',
-                 'TRX': 'tron',
-                 'MIOTA': 'iota',
-                 'DASH': 'dash',
-                 'BNB': 'binance',
-                 'NEO': 'neo'
+                 # 'LTC': 'litecoin',
+                 # 'ADA': 'cardano',
+                 # 'XMR': 'monero',
+                 # 'TRX': 'tron',
+                 # 'MIOTA': 'iota',
+                 # 'DASH': 'dash',
+                 # 'BNB': 'binance',
+                 # 'NEO': 'neo'
                  }
 
-    coin_list = list(coin_list.values()) + list(coin_list.keys())
+    coin_list = list(coin_list.values())
 
     start_date = datetime.datetime(year=2017, month=1, day=1, hour=0)
     end_date = datetime.datetime.utcnow()

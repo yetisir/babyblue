@@ -56,39 +56,8 @@ class DataCollector(object):
             self.interval_end_str = self.interval_end.strftime(
                 self.time_format)
 
-            # check to see if the interval has already been downloaded
-            complete_interval = True
-            cache_file = self.cache_file_path()
-            if os.path.isfile(cache_file):
-                self.interval_df = self.load_cache()
-                if self.interval_df.index[-1] < self.interval_end:
-                    complete_interval = False
-
-                    interval_df_timedelta = (self.interval_df.index[-1] -
-                                             self.interval_df.index[-2])
-                    current_timedelta = (datetime.datetime.utcnow() -
-                                         self.interval_df.index[-1])
-
-                    # if data in cached file is recent, no need to re-download
-                    if current_timedelta < interval_df_timedelta * 2:
-                        complete_interval = True
-
-            # download the interval again if it does not exist or is incomplete
-            if not complete_interval or not os.path.isfile(cache_file):
-                try:
-                    # TODO replace with more appropriate logging method
-                    print('DOWNLOADING: ', self.keyword, self.interval_start,
-                          self.interval_end)
-
-                    # query method is defined by the child class
-                    self.interval_df = self.query()
-                    self.dump_cache()
-                    time.sleep(self.wait)
-
-                # catch the exception and pass to child class
-                except Exception as error:
-                    # handle_query_error method is defined by the child class
-                    self.handle_query_error(error)
+            # query interval
+            self.query_interval()
 
             # merge data if specified and not the first interval
             if self.overlap_interval and len(self.keyword_df):
@@ -102,6 +71,42 @@ class DataCollector(object):
 
         # chop dataframe to originally requested size
         self.keyword_df = self.keyword_df.loc[self.start_date:self.end_date]
+
+    def query_interval(self):
+        # check to see if the interval has already been downloaded
+        complete_interval = True
+        cache_file = self.cache_file_path()
+        if os.path.isfile(cache_file):
+            self.interval_df = self.load_cache()
+            if self.interval_df.index[-1] < self.interval_end:
+                complete_interval = False
+
+                interval_df_timedelta = (self.interval_df.index[-1] -
+                                         self.interval_df.index[-2])
+                current_timedelta = ((datetime.datetime.utcnow() -
+                                     self.interval_df.index[-1]) -
+                                     interval_df_timedelta)
+
+                # if data in cached file is recent, no need to re-download
+                if current_timedelta < interval_df_timedelta:
+                    complete_interval = True
+
+        # download the interval again if it does not exist or is incomplete
+        if not complete_interval or not os.path.isfile(cache_file):
+            try:
+                # TODO replace with more appropriate logging method
+                print('DOWNLOADING: ', self.collector_name, self.keyword,
+                      self.interval_start, self.interval_end)
+
+                # query method is defined by the child class
+                self.interval_df = self.query()
+                self.dump_cache()
+                time.sleep(self.wait)
+
+            # catch the exception and pass to child class
+            except Exception as error:
+                # handle_query_error method is defined by the child class
+                self.handle_query_error(error)
 
     def cache_file_path(self):
         # compile cache file name
@@ -125,8 +130,8 @@ class DataCollector(object):
         # load serialized data from cache
         with open(cache_file, 'rb') as file:
             # TODO replace with more appropriate logging method
-            print('LOADING FROM CACHE: ', self.keyword, self.interval_start,
-                  self.interval_end)
+            print('LOADING FROM CACHE: ', self.collector_name, self.keyword,
+                  self.interval_start, self.interval_end)
             data = pickle.load(file)
 
         # return unpickled dataframe for interval
