@@ -51,6 +51,9 @@ class DataCollector(object):
         Session = sessionmaker(bind=self.cache_engine)
         self.session = Session()
 
+        # cache_table
+        self.define_cache_table()
+
         self.display_source = ''
 
     def query_data(self):

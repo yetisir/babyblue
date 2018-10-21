@@ -22,7 +22,7 @@ if __name__ == '__main__':
 
     coin_list = list(coin_list.values())
 
-    start_date = datetime.datetime(year=2018, month=1, day=1, hour=0)
+    start_date = datetime.datetime(year=2018, month=10, day=15, hour=0)
     end_date = datetime.datetime.utcnow()
 
     assimilator = DataAssimilator(coin_list, start_date, end_date)
