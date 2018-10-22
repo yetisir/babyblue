@@ -9,38 +9,18 @@ from sqlalchemy.orm import sessionmaker
 
 class DataCollector(object):
     def __init__(self, collector_name, keyword, start_date, end_date,
-                 sample_interval, overlap_interval=0, wait=1,
-                 time_format='%Y-%m-%dT%H', cache_name='cache.sqlite'):
+                 sample_interval, cache_name='cache.sqlite'):
 
         self.collector_name = collector_name
         self.keyword = keyword
         self.cache_name = cache_name
-        self.time_format = time_format
-        self.wait = wait
-        self.start_date = datetime.combine(start_date, datetime.min.time())
-        self.end_date = datetime.combine(end_date, datetime.min.time())
+
+        # convert dates to datetime objects if they arent already
+        self.start_date = start_date
+        self.end_date = end_date
 
         # convert times to datetime timedelta objects
         self.sample_interval = pd.to_timedelta(sample_interval)
-        self.overlap_interval = pd.to_timedelta(overlap_interval)
-
-        # defining query limits based on the epoch and interval so that they
-        # are consistent regardless of the specified start date
-        self.epoch = datetime.utcfromtimestamp(0)
-
-        # push back the start date so that there is an natural number of
-        # intervals between the epoch and the start
-        self.query_start = (self.start_date - (self.start_date - self.epoch) %
-                            self.sample_interval)
-
-        # push forward the end date so that there are a natural number of
-        # intervals between the start and end dates
-        self.query_end = (self.end_date - (self.end_date - self.query_start) %
-                          self.sample_interval + self.sample_interval)
-
-        # determine the total number of intervals to be queried
-        self.num_intervals = ((self.query_end - self.query_start) //
-                              self.sample_interval)
 
         # initialize empty dataframe to store all collected data
         self.keyword_df = pd.DataFrame()
@@ -57,19 +37,18 @@ class DataCollector(object):
         self.display_source = ''
 
     def query_data(self):
+
+        intervals = self.download_intervals()
+
         # loop through each interval and compile a dataset
-        for i in range(self.num_intervals):
-            # determing the bounding datetimes for the interval
-            interval_start = (self.query_start + i * self.sample_interval -
-                              self.overlap_interval)
-            interval_end = (self.query_start + (i + 1) * self.sample_interval)
+        for interval_start, interval_end in intervals:
 
             # query interval
             cache_df = self.query_interval(interval_start, interval_end)
 
-            # merge data if specified and not the first interval
-            if self.overlap_interval and len(self.keyword_df):
-                self.merge_overlap()
+            # # merge data if specified and not the first interval
+            # if self.overlap_interval and len(self.keyword_df):
+            #     self.merge_overlap()
             # concatenate the interval to the dataframe
             if len(self.keyword_df):
                 self.keyword_df = self.keyword_df.append(cache_df,
@@ -115,8 +94,8 @@ class DataCollector(object):
 
             # query method is defined by the child class
             cache_df = self.download_to_dataframe(interval_start, interval_end)
-            self.cache_interval(interval_start, interval_end, cache_df)
-            time.sleep(self.wait)
+            if not cache_df.empty:
+                self.cache_interval(interval_start, interval_end, cache_df)
 
             return cache_df
 
@@ -142,6 +121,12 @@ class DataCollector(object):
 
         # return databse engine
         return sqlalchemy.create_engine(URL(**cache), echo=False)
+
+    def cache_interval(self, interval_start, interval_end, cache_df):
+
+        self.remove_interval_from_cache(interval_start, interval_end)
+        cache_df.to_sql(self.collector_name, self.cache_engine,
+                        if_exists='append', index=False)
 
     def get_dataframe(self):
 

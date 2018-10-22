@@ -11,30 +11,32 @@ from sqlalchemy import Integer, DateTime, Boolean, String
 class GoogleTrends(DataCollector):
     def __init__(self, keyword, start_date, end_date, category=0,
                  sample_interval='2d', overlap_interval='1d', wait=1,
-                 sleep=60, time_format='%Y-%m-%dT%H'):
+                 sleep=60):
 
         # call the init functions of the parent class
         super().__init__(collector_name='google-trends',
                          keyword=keyword,
                          start_date=start_date,
                          end_date=end_date,
-                         sample_interval=sample_interval,
-                         overlap_interval=overlap_interval,
-                         wait=wait,
-                         time_format=time_format)
+                         sample_interval=sample_interval)
 
         # defining class attributes
+        self.wait = wait
         self.sleep = sleep
         self.category = category
         self.pytrend = TrendReq()
 
-        # cache_table
-        self.define_cache_table()
+        # convert times to datetime timedelta objects
+        self.overlap_interval = pd.to_timedelta(overlap_interval)
+
+        # defining query limits based on the epoch and interval so that they
+        # are consistent regardless of the specified start date
+        self.epoch = datetime.utcfromtimestamp(0)
 
     def define_cache_table(self):
         metadata = MetaData()
         self.cache_table = Table(self.collector_name, metadata,
-                                 Column('keyword', String(16),
+                                 Column('keyword', String(32),
                                         primary_key=True),
                                  Column('query_start', DateTime,
                                         primary_key=True),
@@ -48,15 +50,21 @@ class GoogleTrends(DataCollector):
         metadata.create_all(self.cache_engine)
 
     def download_to_dataframe(self, interval_start, interval_end):
+        time_format = '%Y-%m-%dT%H'
+
         # convert the interval bounds to strings
-        interval_start_str = interval_start.strftime(self.time_format)
-        interval_end_str = interval_end.strftime(self.time_format)
+        interval_start_str = interval_start.strftime(time_format)
+        interval_end_str = interval_end.strftime(time_format)
 
         # send request to google for the trend data
         timeframe = '{0} {1}'.format(interval_start_str, interval_end_str)
         self.pytrend.build_payload([self.keyword], cat=self.category,
                                    timeframe=timeframe)
+
+        # allow wait time between requests
+        time.sleep(max(0, self.wait - (time.time() - self.request_time)))
         interval_df = self.pytrend.interest_over_time()
+        self.request_time = time.time()
 
         # return dataframe of interval
         cache_df = interval_df
@@ -125,11 +133,6 @@ class GoogleTrends(DataCollector):
         query.delete(synchronize_session=False)
         self.session.commit()
 
-    def cache_interval(self, interval_start, interval_end, cache_df):
-
-        self.remove_interval_from_cache(interval_start, interval_end)
-        cache_df.to_sql(self.collector_name, self.cache_engine,
-                        if_exists='append', index=False)
 
     def is_cache_complete(self, interval_start, interval_end, cache_df):
 
@@ -154,6 +157,36 @@ class GoogleTrends(DataCollector):
 
         return True
 
+    def download_intervals(self):
+
+        # TODO: Generate intervals more eloquently
+
+        # push back the start date so that there is an natural number of
+        # intervals between the epoch and the start
+        query_start = (self.start_date - (self.start_date - self.epoch) %
+                       self.sample_interval)
+
+        # push forward the end date so that there are a natural number of
+        # intervals between the start and end dates
+        query_end = (self.end_date - (self.end_date - query_start) %
+                     self.sample_interval + self.sample_interval)
+
+        # determine the total number of intervals to be queried
+        num_intervals = ((query_end - query_start) // self.sample_interval)
+
+        intervals = []
+
+        # loop through each interval and compile a dataset
+        for i in range(num_intervals):
+
+            # determing the bounding datetimes for the interval
+            interval_start = (query_start + i * self.sample_interval -
+                              self.overlap_interval)
+            interval_end = (query_start + (i + 1) * self.sample_interval)
+
+            intervals.append((interval_start, interval_end))
+
+        return intervals
 
     def merge_overlap(self):
         pass

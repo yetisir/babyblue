@@ -1,16 +1,15 @@
 from . import DataCollector
 from psaw import PushshiftAPI
-import datetime
+from datetime import datetime, timezone
 import pandas as pd
 
 from sqlalchemy import Table, MetaData, Column
-from sqlalchemy import Integer, DateTime, Boolean, String, Text
+from sqlalchemy import Integer, DateTime, String, Text
 
 
 class RedditComments(DataCollector):
-    def __init__(self, keyword, start_date, end_date,
-                 sample_interval='2d', resample_interval='1h',
-                 subreddit=''):
+    def __init__(self, keyword, start_date, end_date, sample_interval='2d',
+                 resample_interval='1h', subreddit='cryptocurrency'):
 
         # call the init functions of the parent class
         super().__init__(collector_name='reddit-comments',
@@ -22,7 +21,8 @@ class RedditComments(DataCollector):
         # defining class attributes
         self.reddit = PushshiftAPI()
         self.subreddit = subreddit
-        self.resample_interval = resample_interval
+        # convert times to datetime timedelta objects
+        self.resample_interval = pd.to_timedelta(resample_interval)
 
     def define_cache_table(self):
         metadata = MetaData()
@@ -31,10 +31,10 @@ class RedditComments(DataCollector):
                                         primary_key=True),
                                  Column('id', Integer,
                                         primary_key=True),
+                                 Column('subreddit', String(32)),
                                  Column('author', String(32)),
                                  Column('timestamp', DateTime),
-                                 Column('parent', Integer),
-                                 Column('body', Text))
+                                 Column('text', Text))
         metadata.create_all(self.cache_engine)
 
     def download_to_dataframe(self, interval_start, interval_end):
@@ -42,13 +42,31 @@ class RedditComments(DataCollector):
         results_gen = self.reddit.search_comments(
             q=self.keyword,
             subreddit=self.subreddit,
-            # filter=['author', 'created_utc', 'body'],
+            filter=['id', 'subreddit', 'author', 'created_utc', 'body'],
             after=int(interval_start.replace(
-                tzinfo=datetime.timezone.utc).timestamp()),
+                tzinfo=timezone.utc).timestamp()),
             before=int(interval_end.replace(
-                tzinfo=datetime.timezone.utc).timestamp()))
+                tzinfo=timezone.utc).timestamp()))
 
-        print(results_gen)
+        cache_df = pd.DataFrame(results_gen)
+
+        if cache_df.empty:
+            return cache_df
+
+        cache_df['keyword'] = self.keyword
+
+        cache_df = cache_df.rename(columns={'created_utc': 'timestamp',
+                                            'body': 'text'})
+
+        cache_df['timestamp'] = pd.to_datetime(cache_df['timestamp'], unit='s')
+
+        cache_df = cache_df[['keyword',
+                             'id',
+                             'subreddit',
+                             'author',
+                             'timestamp',
+                             'text']]
+        return cache_df
 
     def sql_to_dataframe(self, interval_start, interval_end):
         # self.cache_df = pd.Dataframe(cache_dict)
@@ -68,34 +86,61 @@ class RedditComments(DataCollector):
 
         return query
 
+    def remove_interval_from_cache(self, interval_start, interval_end):
+        pass
 
     def is_cache_complete(self, interval_start, interval_end, cache_df):
-
-        # return false if there are no rows in dataframe
-        if not cache_df.shape[0]:
+        if self.existing_interval == (interval_start, interval_end):
+            return True
+        else:
             return False
 
-        first_interval = cache_df['data_start'].min()
-        most_recent_interval = cache_df['data_start'].max()
-        interval_length = cache_df['data_interval'].iloc[-1]
-
-        if first_interval > interval_start:
-            return False
-
-        if datetime.utcnow() - most_recent_interval > interval_length:
-            if most_recent_interval < interval_end:
-                return False
-
-            # return false if there are any partial rows over the interval
-            if cache_df['partial'].sum():
-                return False
-
-        return True
-
-
-    def handle_query_error(self, error):
+    def handle_download_error(self, error):
 
         raise
+
+    def download_intervals(self):
+        sql_query = self.interval_sql_query(self.start_date, self.end_date)
+
+        max_existing_date = sql_query.order_by(
+            self.cache_table.c.timestamp.desc()).first()
+        min_existing_date = sql_query.order_by(
+            self.cache_table.c.timestamp.asc()).first()
+
+        if min_existing_date and max_existing_date:
+            min_existing_date = min_existing_date.timestamp
+            max_existing_date = max_existing_date.timestamp
+
+        interval_bounds = []
+        num_intervals = ((self.end_date - self.start_date) //
+                         self.sample_interval) + 2
+
+        for i in range(num_intervals):
+            bound = self.start_date + i * self.sample_interval
+            bound = min(bound, self.end_date)
+
+            if min_existing_date and max_existing_date:
+                if bound < min_existing_date or bound > max_existing_date:
+                    interval_bounds.append(bound)
+            else:
+                    interval_bounds.append(bound)
+
+        if max_existing_date and min_existing_date:
+            interval_bounds.append(max_existing_date)
+            interval_bounds.append(min_existing_date)
+
+        interval_bounds.sort()
+
+        start_intervals = interval_bounds[:-1]
+        end_intervals = interval_bounds[1:]
+
+        intervals = [i for i in zip(start_intervals, end_intervals)]
+
+        self.existing_interval = (min_existing_date, max_existing_date)
+
+        return intervals
+
+
 
 
         # comment_list = []
