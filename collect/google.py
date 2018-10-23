@@ -10,21 +10,24 @@ from sqlalchemy import Integer, DateTime, Boolean, String
 
 class GoogleTrends(DataCollector):
     def __init__(self, keyword, start_date, end_date, category=0,
-                 sample_interval='2d', overlap_interval='1d', wait=1,
-                 sleep=60):
+                 sample_interval='2d', overlap_interval='1d',
+                 resample_interval='1h', wait=1, sleep=60):
 
         # call the init functions of the parent class
         super().__init__(collector_name='google-trends',
                          keyword=keyword,
                          start_date=start_date,
                          end_date=end_date,
-                         sample_interval=sample_interval)
+                         sample_interval=sample_interval,
+                         resample_interval=resample_interval)
 
         # defining class attributes
         self.wait = wait
         self.sleep = sleep
         self.category = category
         self.pytrend = TrendReq()
+
+        self.request_time = time.time()
 
         # convert times to datetime timedelta objects
         self.overlap_interval = pd.to_timedelta(overlap_interval)
@@ -65,6 +68,20 @@ class GoogleTrends(DataCollector):
         time.sleep(max(0, self.wait - (time.time() - self.request_time)))
         interval_df = self.pytrend.interest_over_time()
         self.request_time = time.time()
+        if interval_df.empty:
+            num_subintervals = ((interval_end - interval_start) //
+                                self.resample_interval) + 1
+            empty_result = []
+            for i in range(num_subintervals):
+                start_time = interval_start + i * self.resample_interval
+                end_time = start_time + self.resample_interval
+                partial = True if end_time > datetime.utcnow() else False
+                empty_result.append([start_time, 0, partial])
+
+            interval_df = pd.DataFrame(empty_result, columns=['date',
+                                                              self.keyword,
+                                                              'isPartial'])
+            interval_df = interval_df.set_index('date')
 
         # return dataframe of interval
         cache_df = interval_df
@@ -128,11 +145,14 @@ class GoogleTrends(DataCollector):
 
         return query
 
-    def remove_interval_from_cache(self, interval_start, interval_end):
+    def post_cache_routine(self, interval_start, interval_end):
+        pass
+
+    def pre_cache_routine(self, interval_start, interval_end):
+        # remove partial interval from cache
         query = self.interval_sql_query(interval_start, interval_end)
         query.delete(synchronize_session=False)
         self.session.commit()
-
 
     def is_cache_complete(self, interval_start, interval_end, cache_df):
 

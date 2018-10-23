@@ -9,7 +9,8 @@ from sqlalchemy.orm import sessionmaker
 
 class DataCollector(object):
     def __init__(self, collector_name, keyword, start_date, end_date,
-                 sample_interval, cache_name='cache.sqlite'):
+                 sample_interval, resample_interval,
+                 cache_name='cache.sqlite'):
 
         self.collector_name = collector_name
         self.keyword = keyword
@@ -18,9 +19,12 @@ class DataCollector(object):
         # convert dates to datetime objects if they arent already
         self.start_date = start_date
         self.end_date = end_date
+        if self.end_date > datetime.utcnow():
+            self.end_date = datetime.utcnow()
 
         # convert times to datetime timedelta objects
         self.sample_interval = pd.to_timedelta(sample_interval)
+        self.resample_interval = pd.to_timedelta(resample_interval)
 
         # initialize empty dataframe to store all collected data
         self.keyword_df = pd.DataFrame()
@@ -94,8 +98,8 @@ class DataCollector(object):
 
             # query method is defined by the child class
             cache_df = self.download_to_dataframe(interval_start, interval_end)
-            if not cache_df.empty:
-                self.cache_interval(interval_start, interval_end, cache_df)
+
+            self.cache_interval(interval_start, interval_end, cache_df)
 
             return cache_df
 
@@ -124,9 +128,11 @@ class DataCollector(object):
 
     def cache_interval(self, interval_start, interval_end, cache_df):
 
-        self.remove_interval_from_cache(interval_start, interval_end)
-        cache_df.to_sql(self.collector_name, self.cache_engine,
-                        if_exists='append', index=False)
+        self.pre_cache_routine(interval_start, interval_end)
+        if not cache_df.empty:
+            cache_df.to_sql(self.collector_name, self.cache_engine,
+                            if_exists='append', index=False)
+        self.post_cache_routine(interval_start, interval_end)
 
     def get_dataframe(self):
 
