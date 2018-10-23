@@ -2,7 +2,6 @@ from . import DataCollector
 from psaw import PushshiftAPI
 from datetime import datetime, timezone, timedelta
 import pandas as pd
-import time
 
 from sqlalchemy import Table, MetaData, Column
 from sqlalchemy import Integer, DateTime, String, Text
@@ -163,7 +162,7 @@ class RedditComments(DataCollector):
                 return True
         return False
 
-    def handle_download_error(self, error):
+    def handle_download_error(self, interval_start, interval_end, error):
 
         raise
 

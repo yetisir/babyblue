@@ -108,17 +108,16 @@ class GoogleTrends(DataCollector):
 
         return cache_df
 
-    def handle_download_error(self, error):
+    def handle_download_error(self, interval_start, interval_end, error):
 
         # catch blocked ip error. this may happen if there are too many request
         # over a short period of time. this is sometimes resolved witha one
         # minute buffer
         if str(error)[-4:-1] == '429':
             # TODO replace with more appropriate logging method
-            print('QUERY LIMIT REACHED: waiting {0} '
-                  'seconds'.format(self.sleep))
+            self.status('QUERY LIMIT REACHED', interval_start, interval_end)
             time.sleep(self.sleep)
-            return self.query_interval()
+            return self.query_interval(interval_start, interval_end)
         else:
             raise
 
