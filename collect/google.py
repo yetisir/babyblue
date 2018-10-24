@@ -37,7 +37,10 @@ class GoogleTrends(DataCollector):
         self.epoch = datetime.utcfromtimestamp(0)
 
     def define_cache_table(self):
+        # initialize a metadata instance for the sqlite cache
         metadata = MetaData()
+
+        # create a table to store the data that is downloaded
         self.cache_table = Table(self.collector_name, metadata,
                                  Column('keyword', String(32),
                                         primary_key=True),
@@ -50,9 +53,12 @@ class GoogleTrends(DataCollector):
                                  Column('data_interval', DateTime),
                                  Column('trend', Integer),
                                  Column('partial', Boolean))
+
+        # add tables to the database
         metadata.create_all(self.cache_engine)
 
     def download_to_dataframe(self, interval_start, interval_end):
+        # define time format required for google trends api
         time_format = '%Y-%m-%dT%H'
 
         # convert the interval bounds to strings
@@ -68,9 +74,16 @@ class GoogleTrends(DataCollector):
         time.sleep(max(0, self.wait - (time.time() - self.request_time)))
         interval_df = self.pytrend.interest_over_time()
         self.request_time = time.time()
+
+        # handle the empty dataframe case. if pytrends returns an empty
+        # dataframe, populate one with 0 trend
         if interval_df.empty:
+
+            # calculate number of intervals
             num_subintervals = ((interval_end - interval_start) //
                                 self.resample_interval) + 1
+
+            # create intervals in a list
             empty_result = []
             for i in range(num_subintervals):
                 start_time = interval_start + i * self.resample_interval
@@ -78,6 +91,7 @@ class GoogleTrends(DataCollector):
                 partial = True if end_time > datetime.utcnow() else False
                 empty_result.append([start_time, 0, partial])
 
+            # create dataframe to complete interval but with 0 trend data
             interval_df = pd.DataFrame(empty_result, columns=['date',
                                                               self.keyword,
                                                               'isPartial'])
@@ -106,6 +120,7 @@ class GoogleTrends(DataCollector):
                              'trend',
                              'partial']]
 
+        # return downloaded data as dataframe
         return cache_df
 
     def handle_download_error(self, interval_start, interval_end, error):
@@ -114,7 +129,7 @@ class GoogleTrends(DataCollector):
         # over a short period of time. this is sometimes resolved witha one
         # minute buffer
         if str(error)[-4:-1] == '429':
-            # TODO replace with more appropriate logging method
+            # update status source and display status
             self.status('QUERY LIMIT REACHED', interval_start, interval_end)
             time.sleep(self.sleep)
             return self.query_interval(interval_start, interval_end)
@@ -122,17 +137,20 @@ class GoogleTrends(DataCollector):
             raise
 
     def sql_to_dataframe(self, interval_start, interval_end):
-        # self.cache_df = pd.Dataframe(cache_dict)
+        # load data from cache
         query = self.interval_sql_query(interval_start, interval_end)
         query = query.order_by('data_start')
-
         cache_df = pd.read_sql(sql=query.statement, con=self.session.bind)
+
+        # convert back to timedeltas
         cache_df['query_interval'] = cache_df['query_interval'] - self.epoch
         cache_df['data_interval'] = cache_df['data_interval'] - self.epoch
 
+        # return cached data as dataframe
         return cache_df
 
     def interval_sql_query(self, interval_start, interval_end):
+        # generate the sql query for retrieving cached data
         query = self.session.query(self.cache_table)
         query = query.filter(
             (self.cache_table.c.keyword == self.keyword),
@@ -142,9 +160,11 @@ class GoogleTrends(DataCollector):
             (self.cache_table.c.data_start >= interval_start),
             (self.cache_table.c.data_start <= interval_end))
 
+        # return the cache query
         return query
 
     def post_cache_routine(self, interval_start, interval_end):
+        # no post-cache routine required
         pass
 
     def pre_cache_routine(self, interval_start, interval_end):
@@ -154,18 +174,21 @@ class GoogleTrends(DataCollector):
         self.session.commit()
 
     def is_cache_complete(self, interval_start, interval_end, cache_df):
-
         # return false if there are no rows in dataframe
         if not cache_df.shape[0]:
             return False
 
+        # test to see if data interval matches with query interval
         first_interval = cache_df['data_start'].min()
         most_recent_interval = cache_df['data_start'].max()
         interval_length = cache_df['data_interval'].iloc[-1]
 
+        # handle incomplete dataset
         if first_interval > interval_start:
             return False
 
+        # handle case where incomplete dataset is due to overlap with current
+        # time and thi not possible to query complete dataset
         if datetime.utcnow() - most_recent_interval > interval_length:
             if most_recent_interval < interval_end:
                 return False
@@ -174,12 +197,10 @@ class GoogleTrends(DataCollector):
             if cache_df['partial'].sum():
                 return False
 
+        # otherwise, cache is considered to eb complete.
         return True
 
     def download_intervals(self):
-
-        # TODO: Generate intervals more eloquently
-
         # push back the start date so that there is an natural number of
         # intervals between the epoch and the start
         query_start = (self.start_date - (self.start_date - self.epoch) %
@@ -203,12 +224,14 @@ class GoogleTrends(DataCollector):
                               self.overlap_interval)
             interval_end = (query_start + (i + 1) * self.sample_interval)
 
+            # add new_interval to list
             intervals.append((interval_start, interval_end))
 
+        # return list of intervals
         return intervals
 
-    def merge_overlap(self):
-        pass
+    # def merge_overlap(self):
+    #     pass
         # # get timedelta of existing data
         # df_time_range = self.keyword_df.index[-1] - self.keyword_df.index[0]
         #

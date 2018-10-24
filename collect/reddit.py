@@ -105,7 +105,6 @@ class RedditComments(DataCollector):
         return cache_df
 
     def interval_sql_query(self, interval_start, interval_end):
-
         # generate the sql query for retrieving cached data
         query = self.session.query(self.cache_table)
         query = query.filter(
