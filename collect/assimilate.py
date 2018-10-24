@@ -1,6 +1,6 @@
 from . import google
 from . import reddit
-import pandas as pd
+# import pandas as pd
 
 
 class DataAssimilator(object):
@@ -29,4 +29,4 @@ class DataAssimilator(object):
                 self.assimilated_dfs.append(data)
 
     def get_data(self):
-        return #pd.concat(self.assimilated_dfs, axis='columns')
+        return  # pd.concat(self.assimilated_dfs, axis='columns')
