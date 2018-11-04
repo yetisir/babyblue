@@ -9,7 +9,7 @@ class RedditComments(CommentCollector):
                  resample_interval='1h', subreddit='cryptocurrency'):
 
         # call the init functions of the parent class
-        super().__init__(collector_name='reddit-comments',
+        super().__init__(collector_name='reddit',
                          keyword=keyword,
                          start_date=start_date,
                          end_date=end_date,
@@ -20,10 +20,6 @@ class RedditComments(CommentCollector):
         # defining class attributes
         self.reddit = PushshiftAPI()
         self.subreddit = subreddit
-
-        # get the intervals that have already been queried previously and are
-        # in the sqlite cache
-        self.load_coverage()
 
     def download_to_dataframe(self, interval_start, interval_end):
         # download comments over a given interval
@@ -68,7 +64,11 @@ class RedditComments(CommentCollector):
         # no error handling required as of now
         raise
 
-
+    def remove_interval_from_cache(self, interval_start, interval_end):
+        # remove interval from cache if there is duplicate data
+        query = self.interval_sql_query(interval_start, interval_end)
+        query.delete(synchronize_session=False)
+        self.session.commit()
 
 
 

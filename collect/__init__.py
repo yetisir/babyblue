@@ -1,13 +1,13 @@
 import os
 import pandas as pd
-import sqlalchemy
-from sqlalchemy.engine.url import URL
-from sqlalchemy.orm import sessionmaker
-
 from datetime import datetime, timedelta
 
-from sqlalchemy import Table, MetaData, Column
+import sqlalchemy
+from sqlalchemy.engine.url import URL
+from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy import Column, ForeignKey
 from sqlalchemy import Integer, DateTime, String, Text
+from sqlalchemy.ext.declarative import declarative_base
 
 
 class DataCollector(object):
@@ -43,16 +43,18 @@ class DataCollector(object):
         self.session = Session()
 
         # initialize a metadata instance for the sqlite cache
-        self.metadata = MetaData()
+        Base = declarative_base()
+
 
         # create the sqlite cache_table
-        self.define_cache_table()
-        self.define_cache_coverage_table()
+        self.define_cache_table(Base)
+        self.define_cache_coverage_table(Base)
 
         # add tables to the database
-        self.metadata.create_all(self.cache_engine)
+        Base.metadata.create_all(self.cache_engine)
 
-        # load existing coverage
+        # get the intervals that have already been queried previously and are
+        # in the sqlite cache
         self.load_coverage()
 
         # variable for dispalying status
@@ -182,8 +184,7 @@ class DataCollector(object):
 
         # cache the downloaded data if there is data to cache
         if not cache_df.empty:
-            cache_df.to_sql(self.collector_name, self.cache_engine,
-                            if_exists='append', index=False)
+            self.dataframe_to_sql(cache_df)
 
         self.update_coverage(interval_start, interval_end)
 
@@ -213,7 +214,7 @@ class DataCollector(object):
     def load_coverage(self):
         # load the coverage intervals from the sqlite database
         query = self.session.query(self.coverage_table)
-        query = query.filter((self.coverage_table.c.keyword == self.keyword))
+        query = query.filter((self.coverage_table.keyword == self.keyword))
         coverage_df = pd.read_sql(sql=query.statement,
                                   con=self.session.bind)
 
@@ -232,23 +233,16 @@ class DataCollector(object):
         # assign coverage as a class attribute
         self.coverage = coverage
 
-    def define_cache_coverage_table(self):
-
+    def define_cache_coverage_table(self, Base):
         # create a table to store the coverage intervals
         self.coverage_table_name = '{0}-coverage'.format(self.collector_name)
-        self.coverage_table = Table(self.coverage_table_name,
-                                    self.metadata,
-                                    Column('keyword', String(32),
-                                           primary_key=True),
-                                    Column('query_start', DateTime,
-                                           primary_key=True),
-                                    Column('query_end', DateTime))
 
-    def remove_interval_from_cache(self, interval_start, interval_end):
-        # remove interval from cache if there is duplicate data
-        query = self.interval_sql_query(interval_start, interval_end)
-        query.delete(synchronize_session=False)
-        self.session.commit()
+        coverage = {'__tablename__': self.coverage_table_name,
+                    'keyword': Column('keyword', String(32)),
+                    'query_start': Column(DateTime, primary_key=True),
+                    'query_end': Column(DateTime)}
+
+        self.coverage_table = type('Coverage', (Base, ), coverage)
 
     def update_coverage_list(self, interval_start, interval_end):
         # after the cache is updated, we need to update the coverage intervals
@@ -288,7 +282,7 @@ class DataCollector(object):
 
         # remove coverage intervals from sqlite database
         query = self.session.query(self.coverage_table)
-        query = query.filter((self.coverage_table.c.keyword == self.keyword))
+        query = query.filter((self.coverage_table.keyword == self.keyword))
         query.delete(synchronize_session=False)
         self.session.commit()
 
@@ -312,19 +306,42 @@ class CommentCollector(DataCollector):
                          sample_interval=sample_interval,
                          resample_interval=resample_interval)
 
-    def define_cache_table(self):
+    def define_cache_table(self, Base):
 
         # create a table to store the data that is downloaded
-        self.cache_table = Table(self.collector_name,
-                                 self.metadata,
-                                 Column('keyword', String(32),
-                                        primary_key=True),
-                                 Column('id', Integer,
-                                        primary_key=True),
-                                 Column(self.community_title, String(32)),
-                                 Column('author', String(32)),
-                                 Column('timestamp', DateTime),
-                                 Column('text', Text))
+        self.comment_table_name = '{0}-comments'.format(self.collector_name)
+
+        comments = {'__tablename__': self.comment_table_name,
+                    'id': Column(Integer, primary_key=True),
+                    self.community_title: Column(String(32)),
+                    'author': Column(String(32)),
+                    'timestamp': Column(DateTime),
+                    'text': Column(Text)}
+
+        self.comment_table = type('Comments', (Base, ), comments)
+
+        cache = {'__tablename__': self.collector_name,
+                 'keyword': Column('keyword', String(32)),
+                 'comment_id': Column('comment_id', Integer,
+                                      ForeignKey(self.comment_table.id),
+                                      primary_key=True),
+                 'comment': relationship('Comments')}
+
+        self.cache_table = type('Cache', (Base, ), cache)
+
+    def dataframe_to_sql(self, cache_df):
+        cache = cache_df['keyword', 'id']
+        cache = cache.rename(index='str', columns={'id', 'comment_id'})
+
+        comments = cache_df['id', 'author', 'timestamp', 'text']
+
+        temp_engine = sqlalchemy.create_engine('sqlite://')
+        cache.to_sql('temp', temp_engine,
+                     if_exists='append', index=False)
+
+        comments.to_sql('temp', temp_engine,
+                        if_exists='append', index=False)
+        self.session.merge(temp_engine)
 
     def sql_to_dataframe(self, interval_start, interval_end):
         # load data from cache
@@ -335,13 +352,17 @@ class CommentCollector(DataCollector):
         # return cached data as dataframe
         return cache_df
 
+    def remove_interval_from_cache(self, interval_start, interval_end):
+        pass
+
     def interval_sql_query(self, interval_start, interval_end):
         # generate the sql query for retrieving cached data
         query = self.session.query(self.cache_table)
+        query = query.outerjoin(self.comment_table)
         query = query.filter(
-            (self.cache_table.c.keyword == self.keyword),
-            (self.cache_table.c.timestamp >= interval_start),
-            (self.cache_table.c.timestamp <= interval_end))
+            self.cache_table.keyword == self.keyword,
+            self.comment_table.timestamp >= interval_start,
+            self.comment_table.timestamp <= interval_end)
 
         # return the cache query
         return query
