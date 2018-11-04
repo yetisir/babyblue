@@ -183,7 +183,10 @@ class DataCollector(object):
 
 class CommentCollector(DataCollector):
     def __init__(self, keyword, start_date, end_date, collector_name,
-                 sample_interval='31d', resample_interval='1h'):
+                 sample_interval='31d', resample_interval='1h',
+                 community_title='community'):
+
+        self.community_title = community_title
 
         # call the init functions of the parent class
         super().__init__(collector_name=collector_name,
@@ -204,7 +207,7 @@ class CommentCollector(DataCollector):
                                         primary_key=True),
                                  Column('id', Integer,
                                         primary_key=True),
-                                 Column('subreddit', String(32)),
+                                 Column(self.community_title, String(32)),
                                  Column('author', String(32)),
                                  Column('timestamp', DateTime),
                                  Column('text', Text))

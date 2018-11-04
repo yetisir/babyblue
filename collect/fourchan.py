@@ -4,9 +4,9 @@ from datetime import timezone
 import pandas as pd
 
 
-class RedditComments(CommentCollector):
+class FourChanComments(CommentCollector):
     def __init__(self, keyword, start_date, end_date, sample_interval='31d',
-                 resample_interval='1h', subreddit='cryptocurrency'):
+                 resample_interval='1h', board='biz'):
 
         # call the init functions of the parent class
         super().__init__(collector_name='reddit-comments',
@@ -15,11 +15,11 @@ class RedditComments(CommentCollector):
                          end_date=end_date,
                          sample_interval=sample_interval,
                          resample_interval=resample_interval,
-                         community_title='subreddit')
+                         community_title='board')
 
         # defining class attributes
         self.reddit = PushshiftAPI()
-        self.subreddit = subreddit
+        self.board = board
 
         # get the intervals that have already been queried previously and are
         # in the sqlite cache
@@ -67,32 +67,3 @@ class RedditComments(CommentCollector):
     def handle_download_error(self, interval_start, interval_end, error):
         # no error handling required as of now
         raise
-
-
-
-
-
-
-        # comment_list = []
-        # for comment in results_gen:
-        #     comment_list.append(
-        #         {'author': comment.author,
-        #          'datetime': datetime.datetime.utcfromtimestamp(
-        #              comment.created_utc),
-        #          'comment': comment.body,
-        #          '{0}_mentions'.format(
-        #              self.keyword): comment.body.lower().count(self.keyword),
-        #          '{0}_comments'.format(self.keyword): 1})
-        #
-        # comment_df = pd.DataFrame(comment_list)
-        # comment_df = comment_df.set_index('datetime')
-        # interval_df = comment_df.resample(self.resample_interval).sum()
-        #
-        # print(interval_df)
-        # if (datetime.datetime.utcnow() - interval_df.index[-1] <
-        #         pd.to_timedelta(self.resample_interval)):
-        #     interval_df = interval_df[:-1]
-        # print(interval_df)
-        #
-        # # return dataframe of interval
-        # return interval_df

@@ -11,7 +11,7 @@ from sqlalchemy import Integer, DateTime, Boolean, String
 class GoogleTrends(DataCollector):
     def __init__(self, keyword, start_date, end_date, category=0,
                  sample_interval='2d', overlap_interval='1d',
-                 resample_interval='1h', wait=1, sleep=60):
+                 resample_interval='1h', wait=1, sleep=00):
 
         # call the init functions of the parent class
         super().__init__(collector_name='google-trends',
@@ -25,7 +25,7 @@ class GoogleTrends(DataCollector):
         self.wait = wait
         self.sleep = sleep
         self.category = category
-        self.pytrend = TrendReq()
+        self.pytrend = TrendReq(hl='')
 
         self.request_time = time.time()
 
@@ -128,11 +128,18 @@ class GoogleTrends(DataCollector):
         # catch blocked ip error. this may happen if there are too many request
         # over a short period of time. this is sometimes resolved witha one
         # minute buffer
-        if str(error)[-4:-1] == '429':
+        error_code = str(error)[-4:-1]
+        if error_code == '429':
             # update status source and display status
             self.status('QUERY LIMIT REACHED', interval_start, interval_end)
-            time.sleep(self.sleep)
-            return self.query_interval(interval_start, interval_end)
+            if self.sleep:
+                time.sleep(self.sleep)
+                return self.query_interval(interval_start, interval_end)
+            else:
+                pass
+        elif error_code == '500':
+            self.status('GOOGLE SERVER ERROR', interval_start, interval_end)
+            pass
         else:
             raise
 
