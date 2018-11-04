@@ -42,8 +42,15 @@ class DataCollector(object):
         Session = sessionmaker(bind=self.cache_engine)
         self.session = Session()
 
+        # initialize a metadata instance for the sqlite cache
+        self.metadata = MetaData()
+
         # create the sqlite cache_table
         self.define_cache_table()
+        self.define_cache_coverage_table()
+
+        # add tables to the database
+        self.metadata.create_all(self.cache_engine)
 
         # variable for dispalying status
         self.display_source = ''
@@ -196,13 +203,25 @@ class CommentCollector(DataCollector):
                          sample_interval=sample_interval,
                          resample_interval=resample_interval)
 
+    def define_cache_coverage_table(self):
+
+        # create a table to store the coverage intervals
+        self.coverage_table_name = '{0}-coverage'.format(self.collector_name)
+        self.coverage_table = Table(self.coverage_table_name,
+                                    self.metadata,
+                                    Column('keyword', String(32),
+                                           primary_key=True),
+                                    Column('query_start', DateTime,
+                                           primary_key=True),
+                                    Column('query_end', DateTime))
+
     def define_cache_table(self):
         # initialize a metadata instance for the sqlite cache
         metadata = MetaData()
 
         # create a table to store the data that is downloaded
         self.cache_table = Table(self.collector_name,
-                                 metadata,
+                                 self.metadata,
                                  Column('keyword', String(32),
                                         primary_key=True),
                                  Column('id', Integer,
@@ -211,19 +230,6 @@ class CommentCollector(DataCollector):
                                  Column('author', String(32)),
                                  Column('timestamp', DateTime),
                                  Column('text', Text))
-
-        # create a table to store the coverage intervals
-        self.coverage_table_name = '{0}-coverage'.format(self.collector_name)
-        self.coverage_table = Table(self.coverage_table_name,
-                                    metadata,
-                                    Column('keyword', String(32),
-                                           primary_key=True),
-                                    Column('query_start', DateTime,
-                                           primary_key=True),
-                                    Column('query_end', DateTime))
-
-        # add tables to the database
-        metadata.create_all(self.cache_engine)
 
     def sql_to_dataframe(self, interval_start, interval_end):
         # load data from cache
