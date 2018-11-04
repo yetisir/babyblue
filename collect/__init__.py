@@ -52,6 +52,9 @@ class DataCollector(object):
         # add tables to the database
         self.metadata.create_all(self.cache_engine)
 
+        # load existing coverage
+        self.load_coverage()
+
         # variable for dispalying status
         self.display_source = ''
 
@@ -66,7 +69,7 @@ class DataCollector(object):
             # query the specified interval
             cache_df = self.query_interval(interval_start, interval_end)
 
-            # TO DO: all this - merge data
+            # TO DO: all this - merge data - maybe move to separate class
             # merge data if specified and not the first interval
             # if self.overlap_interval and len(self.keyword_df):
             #     self.merge_overlap()
@@ -171,13 +174,18 @@ class DataCollector(object):
         return sqlalchemy.create_engine(URL(**cache), echo=False)
 
     def cache_interval(self, interval_start, interval_end, cache_df):
-        # run any pre-cache routiens defined in the child class
+        # remove interval from cache if it exists
         self.pre_cache_routine(interval_start, interval_end)
+
+        # run any pre-cache routiens defined in the child class
+        self.remove_interval_from_cache(interval_start, interval_end)
 
         # cache the downloaded data if there is data to cache
         if not cache_df.empty:
             cache_df.to_sql(self.collector_name, self.cache_engine,
                             if_exists='append', index=False)
+
+        self.update_coverage(interval_start, interval_end)
 
         # run any post-cache routiens defined in the child class
         self.post_cache_routine(interval_start, interval_end)
@@ -186,6 +194,107 @@ class DataCollector(object):
 
         # return the dataframe with the collected data
         return self.keyword_df
+
+    def is_cache_complete(self, interval_start, interval_end, cache_df):
+        # test if the interval is contained within the bounds of any of the
+        # coverage intervals
+        max_coverage_end = datetime.utcfromtimestamp(0)
+        for coverage_start, coverage_end in self.coverage:
+            max_coverage_end = max(max_coverage_end, coverage_end)
+            if (interval_start >= coverage_start and
+                    interval_end <= coverage_end):
+                return True
+
+        if datetime.utcnow() - max_coverage_end < self.resample_interval:
+            return True
+
+        return False
+
+    def load_coverage(self):
+        # load the coverage intervals from the sqlite database
+        query = self.session.query(self.coverage_table)
+        query = query.filter((self.coverage_table.c.keyword == self.keyword))
+        coverage_df = pd.read_sql(sql=query.statement,
+                                  con=self.session.bind)
+
+        # create an empty dataframe if there is no coverage
+        if coverage_df.empty:
+            coverage_df = pd.DataFrame(data=None,
+                                       columns=coverage_df.columns,
+                                       index=coverage_df.index)
+
+        # convert dataframe to nested list for easier handling
+        coverage = coverage_df[['query_start', 'query_end']].values.tolist()
+        for i, interval in enumerate(coverage):
+            for b, bound in enumerate(interval):
+                coverage[i][b] = datetime.utcfromtimestamp(bound * 1e-9)
+
+        # assign coverage as a class attribute
+        self.coverage = coverage
+
+    def define_cache_coverage_table(self):
+
+        # create a table to store the coverage intervals
+        self.coverage_table_name = '{0}-coverage'.format(self.collector_name)
+        self.coverage_table = Table(self.coverage_table_name,
+                                    self.metadata,
+                                    Column('keyword', String(32),
+                                           primary_key=True),
+                                    Column('query_start', DateTime,
+                                           primary_key=True),
+                                    Column('query_end', DateTime))
+
+    def remove_interval_from_cache(self, interval_start, interval_end):
+        # remove interval from cache if there is duplicate data
+        query = self.interval_sql_query(interval_start, interval_end)
+        query.delete(synchronize_session=False)
+        self.session.commit()
+
+    def update_coverage_list(self, interval_start, interval_end):
+        # after the cache is updated, we need to update the coverage intervals
+        merged_coverage = []
+        coverage = self.coverage
+        coverage.append([interval_start, interval_end])
+        coverage = sorted(coverage, key=lambda x: x[0])
+
+        # loop through the coverage intervals and merge any overlapping ones
+        for higher in coverage:
+            # add the first interval to the merged list
+            if not merged_coverage:
+                merged_coverage.append(higher)
+            else:
+                lower = merged_coverage[-1]
+                # test for intersection between lower and higher:
+                # we know via sorting that lower[0] <= higher[0]
+                if higher[0] <= lower[1]:
+                    upper_bound = max(lower[1], higher[1])
+                    # replace by merged interval
+                    merged_coverage[-1] = (lower[0], upper_bound)
+                else:
+                    # add interval to coverage list
+                    merged_coverage.append(higher)
+        self.coverage = [list(x) for x in merged_coverage]
+
+    def update_coverage(self, interval_start, interval_end):
+        # merge coverage list with current interval
+
+        self.update_coverage_list(interval_start,
+                                  min(datetime.utcnow(), interval_end))
+
+        # convert coverge list to dataframe
+        coverage_df = pd.DataFrame(self.coverage, columns=['query_start',
+                                                           'query_end'])
+        coverage_df.insert(0, 'keyword', self.keyword)
+
+        # remove coverage intervals from sqlite database
+        query = self.session.query(self.coverage_table)
+        query = query.filter((self.coverage_table.c.keyword == self.keyword))
+        query.delete(synchronize_session=False)
+        self.session.commit()
+
+        # add new coverage intervals to sqlite database
+        coverage_df.to_sql(self.coverage_table_name, self.cache_engine,
+                           if_exists='append', index=False)
 
 
 class CommentCollector(DataCollector):
@@ -203,21 +312,7 @@ class CommentCollector(DataCollector):
                          sample_interval=sample_interval,
                          resample_interval=resample_interval)
 
-    def define_cache_coverage_table(self):
-
-        # create a table to store the coverage intervals
-        self.coverage_table_name = '{0}-coverage'.format(self.collector_name)
-        self.coverage_table = Table(self.coverage_table_name,
-                                    self.metadata,
-                                    Column('keyword', String(32),
-                                           primary_key=True),
-                                    Column('query_start', DateTime,
-                                           primary_key=True),
-                                    Column('query_end', DateTime))
-
     def define_cache_table(self):
-        # initialize a metadata instance for the sqlite cache
-        metadata = MetaData()
 
         # create a table to store the data that is downloaded
         self.cache_table = Table(self.collector_name,
@@ -251,82 +346,11 @@ class CommentCollector(DataCollector):
         # return the cache query
         return query
 
-    def load_coverage(self):
-        # load the coverage intervals from the sqlite database
-        query = self.session.query(self.coverage_table)
-        query = query.filter((self.coverage_table.c.keyword == self.keyword))
-        coverage_df = pd.read_sql(sql=query.statement,
-                                  con=self.session.bind)
-
-        # create an empty dataframe if there is no coverage
-        if coverage_df.empty:
-            coverage_df = pd.DataFrame(data=None,
-                                       columns=coverage_df.columns,
-                                       index=coverage_df.index)
-
-        # convert dataframe to nested list for easier handling
-        coverage = coverage_df[['query_start', 'query_end']].values.tolist()
-        for i, interval in enumerate(coverage):
-            for b, bound in enumerate(interval):
-                coverage[i][b] = datetime.utcfromtimestamp(bound * 1e-9)
-
-        # assign coverage as a class attribute
-        self.coverage = coverage
-
     def pre_cache_routine(self, interval_start, interval_end):
-        # remove interval from cache if there is duplicate data
-        query = self.interval_sql_query(interval_start, interval_end)
-        query.delete(synchronize_session=False)
-        self.session.commit()
+        pass
 
     def post_cache_routine(self, interval_start, interval_end):
-        # after the cache is updated, we need to update the coverage intervals
-        merged_coverage = []
-        coverage = self.coverage
-        coverage.append([interval_start, interval_end])
-        coverage = sorted(coverage, key=lambda x: x[0])
-
-        # loop through the coverage intervals and merge any overlapping ones
-        for higher in coverage:
-            # add the first interval to the merged list
-            if not merged_coverage:
-                merged_coverage.append(higher)
-            else:
-                lower = merged_coverage[-1]
-                # test for intersection between lower and higher:
-                # we know via sorting that lower[0] <= higher[0]
-                if higher[0] <= lower[1]:
-                    upper_bound = max(lower[1], higher[1])
-                    # replace by merged interval
-                    merged_coverage[-1] = (lower[0], upper_bound)
-                else:
-                    # add interval to coverage list
-                    merged_coverage.append(higher)
-
-        # convert coverge list to dataframe
-        self.coverage = [list(x) for x in merged_coverage]
-        coverage_df = pd.DataFrame(self.coverage, columns=['query_start',
-                                                           'query_end'])
-        coverage_df.insert(0, 'keyword', self.keyword)
-
-        # remove coverage intervals from sqlite database
-        query = self.session.query(self.coverage_table)
-        query = query.filter((self.coverage_table.c.keyword == self.keyword))
-        query.delete(synchronize_session=False)
-        self.session.commit()
-
-        # add new coverage intervals to sqlite database
-        coverage_df.to_sql(self.coverage_table_name, self.cache_engine,
-                           if_exists='append', index=False)
-
-    def is_cache_complete(self, interval_start, interval_end, cache_df):
-        # test if the interval is contained within the bounds of any of the
-        # coverage intervals
-        for coverage_start, coverage_end in self.coverage:
-            if (interval_start >= coverage_start and
-                    interval_end <= coverage_end):
-                return True
-        return False
+        pass
 
     def download_intervals(self):
         # determine the number of intervals based on the interval size

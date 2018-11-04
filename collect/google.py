@@ -175,37 +175,7 @@ class GoogleTrends(DataCollector):
         pass
 
     def pre_cache_routine(self, interval_start, interval_end):
-        # remove partial interval from cache
-        query = self.interval_sql_query(interval_start, interval_end)
-        query.delete(synchronize_session=False)
-        self.session.commit()
-
-    def is_cache_complete(self, interval_start, interval_end, cache_df):
-        # return false if there are no rows in dataframe
-        if not cache_df.shape[0]:
-            return False
-
-        # test to see if data interval matches with query interval
-        first_interval = cache_df['data_start'].min()
-        most_recent_interval = cache_df['data_start'].max()
-        interval_length = cache_df['data_interval'].iloc[-1]
-
-        # handle incomplete dataset
-        if first_interval > interval_start:
-            return False
-
-        # handle case where incomplete dataset is due to overlap with current
-        # time and thi not possible to query complete dataset
-        if datetime.utcnow() - most_recent_interval > interval_length:
-            if most_recent_interval < interval_end:
-                return False
-
-            # return false if there are any partial rows over the interval
-            if cache_df['partial'].sum():
-                return False
-
-        # otherwise, cache is considered to eb complete.
-        return True
+        pass
 
     def download_intervals(self):
         # push back the start date so that there is an natural number of
