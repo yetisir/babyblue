@@ -4,14 +4,17 @@ import pandas as pd
 import time
 from datetime import datetime
 
-from sqlalchemy import Table, MetaData, Column
-from sqlalchemy import Integer, DateTime, Boolean, String
+from sqlalchemy import Column, Integer, DateTime, Boolean, String
 
 
 class GoogleTrends(DataCollector):
     def __init__(self, keyword, start_date, end_date, category=0,
-                 sample_interval='2d', overlap_interval='1d',
-                 resample_interval='1h', wait=1, sleep=00):
+                 sample_interval='5d', overlap_interval='1d',
+                 data_resolution='1h', wait=1, sleep=00):
+
+        # unique coverage_identifier for reproduceable data
+        self.coverage_interval = (pd.to_timedelta(sample_interval) +
+                                  datetime.utcfromtimestamp(0))
 
         # call the init functions of the parent class
         super().__init__(collector_name='google-trends',
@@ -19,7 +22,7 @@ class GoogleTrends(DataCollector):
                          start_date=start_date,
                          end_date=end_date,
                          sample_interval=sample_interval,
-                         resample_interval=resample_interval)
+                         data_resolution=data_resolution)
 
         # defining class attributes
         self.wait = wait
@@ -32,30 +35,22 @@ class GoogleTrends(DataCollector):
         # convert times to datetime timedelta objects
         self.overlap_interval = pd.to_timedelta(overlap_interval)
 
-        # defining query limits based on the epoch and interval so that they
-        # are consistent regardless of the specified start date
-        self.epoch = datetime.utcfromtimestamp(0)
+    def define_cache_table(self, Base):
 
-    def define_cache_table(self):
-        # initialize a metadata instance for the sqlite cache
-        metadata = MetaData()
+        cache = {'__tablename__': self.collector_name,
+                 'keyword': Column('keyword', String(32),
+                                   primary_key=True),
+                 'query_start': Column(DateTime,
+                                       primary_key=True),
+                 'query_interval': Column(DateTime,
+                                          primary_key=True),
+                 'data_start': Column(DateTime,
+                                      primary_key=True),
+                 'data_interval': Column(DateTime),
+                 'trend': Column(Integer),
+                 'partial': Column(Boolean)}
 
-        # create a table to store the data that is downloaded
-        self.cache_table = Table(self.collector_name, metadata,
-                                 Column('keyword', String(32),
-                                        primary_key=True),
-                                 Column('query_start', DateTime,
-                                        primary_key=True),
-                                 Column('query_interval', DateTime,
-                                        primary_key=True),
-                                 Column('data_start', DateTime,
-                                        primary_key=True),
-                                 Column('data_interval', DateTime),
-                                 Column('trend', Integer),
-                                 Column('partial', Boolean))
-
-        # add tables to the database
-        metadata.create_all(self.cache_engine)
+        self.cache_table = type('Cache', (Base, ), cache)
 
     def download_to_dataframe(self, interval_start, interval_end):
         # define time format required for google trends api
@@ -81,13 +76,13 @@ class GoogleTrends(DataCollector):
 
             # calculate number of intervals
             num_subintervals = ((interval_end - interval_start) //
-                                self.resample_interval) + 1
+                                self.data_resolution) + 1
 
             # create intervals in a list
             empty_result = []
             for i in range(num_subintervals):
-                start_time = interval_start + i * self.resample_interval
-                end_time = start_time + self.resample_interval
+                start_time = interval_start + i * self.data_resolution
+                end_time = start_time + self.data_resolution
                 partial = True if end_time > datetime.utcnow() else False
                 empty_result.append([start_time, 0, partial])
 
@@ -143,6 +138,10 @@ class GoogleTrends(DataCollector):
         else:
             raise
 
+    def dataframe_to_sql(self, cache_df):
+        cache_df.to_sql(self.collector_name, self.cache_engine,
+                        if_exists='append', index=False)
+
     def sql_to_dataframe(self, interval_start, interval_end):
         # load data from cache
         query = self.interval_sql_query(interval_start, interval_end)
@@ -160,12 +159,12 @@ class GoogleTrends(DataCollector):
         # generate the sql query for retrieving cached data
         query = self.session.query(self.cache_table)
         query = query.filter(
-            (self.cache_table.c.keyword == self.keyword),
-            (self.cache_table.c.query_start == interval_start),
-            (self.cache_table.c.query_interval ==
+            (self.cache_table.keyword == self.keyword),
+            (self.cache_table.query_start == interval_start),
+            (self.cache_table.query_interval ==
              ((self.sample_interval + self.overlap_interval) + self.epoch)),
-            (self.cache_table.c.data_start >= interval_start),
-            (self.cache_table.c.data_start <= interval_end))
+            (self.cache_table.data_start >= interval_start),
+            (self.cache_table.data_start <= interval_end))
 
         # return the cache query
         return query
@@ -175,7 +174,9 @@ class GoogleTrends(DataCollector):
         pass
 
     def pre_cache_routine(self, interval_start, interval_end):
-        pass
+        query = self.interval_sql_query(interval_start, interval_end)
+        query.delete(synchronize_session=False)
+        self.session.commit()
 
     def download_intervals(self):
         # push back the start date so that there is an natural number of

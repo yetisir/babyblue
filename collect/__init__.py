@@ -5,14 +5,13 @@ from datetime import datetime, timedelta
 import sqlalchemy
 from sqlalchemy.engine.url import URL
 from sqlalchemy.orm import sessionmaker, relationship
-from sqlalchemy import Column, ForeignKey
-from sqlalchemy import Integer, DateTime, String, Text
+from sqlalchemy import Column, ForeignKey, DateTime, String, Text
 from sqlalchemy.ext.declarative import declarative_base
 
 
 class DataCollector(object):
     def __init__(self, collector_name, keyword, start_date, end_date,
-                 sample_interval, resample_interval,
+                 sample_interval, data_resolution,
                  cache_name='cache.sqlite'):
 
         # setting class attributes
@@ -25,12 +24,12 @@ class DataCollector(object):
         # convert dates to datetime objects if they arent already
         self.start_date = start_date
         self.end_date = end_date
-        if self.end_date > datetime.utcnow():
-            self.end_date = datetime.utcnow()
+        # if self.end_date > datetime.utcnow():
+        #     self.end_date = datetime.utcnow()
 
         # convert times to datetime timedelta objects
         self.sample_interval = pd.to_timedelta(sample_interval)
-        self.resample_interval = pd.to_timedelta(resample_interval)
+        self.data_resolution = pd.to_timedelta(data_resolution)
 
         # initialize empty dataframe to store all collected data
         self.keyword_df = pd.DataFrame()
@@ -45,13 +44,16 @@ class DataCollector(object):
         # initialize a metadata instance for the sqlite cache
         Base = declarative_base()
 
-
         # create the sqlite cache_table
         self.define_cache_table(Base)
         self.define_cache_coverage_table(Base)
 
         # add tables to the database
         Base.metadata.create_all(self.cache_engine)
+
+        # defining query limits based on the epoch and interval so that they
+        # are consistent regardless of the specified start date
+        self.epoch = datetime.utcfromtimestamp(0)
 
         # get the intervals that have already been queried previously and are
         # in the sqlite cache
@@ -176,11 +178,8 @@ class DataCollector(object):
         return sqlalchemy.create_engine(URL(**cache), echo=False)
 
     def cache_interval(self, interval_start, interval_end, cache_df):
-        # remove interval from cache if it exists
-        self.pre_cache_routine(interval_start, interval_end)
-
         # run any pre-cache routiens defined in the child class
-        self.remove_interval_from_cache(interval_start, interval_end)
+        self.pre_cache_routine(interval_start, interval_end)
 
         # cache the downloaded data if there is data to cache
         if not cache_df.empty:
@@ -206,15 +205,18 @@ class DataCollector(object):
                     interval_end <= coverage_end):
                 return True
 
-        if datetime.utcnow() - max_coverage_end < self.resample_interval:
-            return True
+        if interval_end > max_coverage_end:
+            if datetime.utcnow() - max_coverage_end < self.data_resolution:
+                return True
 
         return False
 
     def load_coverage(self):
         # load the coverage intervals from the sqlite database
         query = self.session.query(self.coverage_table)
-        query = query.filter((self.coverage_table.keyword == self.keyword))
+        query = query.filter((self.coverage_table.keyword == self.keyword),
+                             (self.coverage_table.coverage_interval
+                              == self.coverage_interval))
         coverage_df = pd.read_sql(sql=query.statement,
                                   con=self.session.bind)
 
@@ -238,8 +240,9 @@ class DataCollector(object):
         self.coverage_table_name = '{0}-coverage'.format(self.collector_name)
 
         coverage = {'__tablename__': self.coverage_table_name,
-                    'keyword': Column('keyword', String(32)),
+                    'keyword': Column('keyword', String(32), primary_key=True),
                     'query_start': Column(DateTime, primary_key=True),
+                    'coverage_interval': Column(DateTime, primary_key=True),
                     'query_end': Column(DateTime)}
 
         self.coverage_table = type('Coverage', (Base, ), coverage)
@@ -279,6 +282,7 @@ class DataCollector(object):
         coverage_df = pd.DataFrame(self.coverage, columns=['query_start',
                                                            'query_end'])
         coverage_df.insert(0, 'keyword', self.keyword)
+        coverage_df.insert(2, 'coverage_interval', self.coverage_interval)
 
         # remove coverage intervals from sqlite database
         query = self.session.query(self.coverage_table)
@@ -293,10 +297,12 @@ class DataCollector(object):
 
 class CommentCollector(DataCollector):
     def __init__(self, keyword, start_date, end_date, collector_name,
-                 sample_interval='31d', resample_interval='1h',
+                 sample_interval='31d', data_resolution='1h',
                  community_title='community'):
 
         self.community_title = community_title
+
+        self.coverage_interval = datetime.utcfromtimestamp(0)
 
         # call the init functions of the parent class
         super().__init__(collector_name=collector_name,
@@ -304,7 +310,7 @@ class CommentCollector(DataCollector):
                          start_date=start_date,
                          end_date=end_date,
                          sample_interval=sample_interval,
-                         resample_interval=resample_interval)
+                         data_resolution=data_resolution)
 
     def define_cache_table(self, Base):
 
@@ -312,7 +318,7 @@ class CommentCollector(DataCollector):
         self.comment_table_name = '{0}-comments'.format(self.collector_name)
 
         comments = {'__tablename__': self.comment_table_name,
-                    'id': Column(Integer, primary_key=True),
+                    'id': Column(String(32), primary_key=True),
                     self.community_title: Column(String(32)),
                     'author': Column(String(32)),
                     'timestamp': Column(DateTime),
@@ -321,27 +327,86 @@ class CommentCollector(DataCollector):
         self.comment_table = type('Comments', (Base, ), comments)
 
         cache = {'__tablename__': self.collector_name,
-                 'keyword': Column('keyword', String(32)),
-                 'comment_id': Column('comment_id', Integer,
+                 'keyword': Column('keyword', String(32),
+                                   primary_key=True),
+                 'comment_id': Column('comment_id', String(32),
                                       ForeignKey(self.comment_table.id),
                                       primary_key=True),
                  'comment': relationship('Comments')}
 
         self.cache_table = type('Cache', (Base, ), cache)
 
+    def merge_dataframe_into_table(self, dataframe, table_name, p_keys):
+        temp_table_name = 'temp'
+
+        dataframe.to_sql(temp_table_name, self.cache_engine,
+                         if_exists='replace', index=False)
+
+        insert_string = dataframe.columns[0]
+        select_string = 't.{0}'.format(dataframe.columns[0])
+
+        for column_name in dataframe.columns[1:]:
+            insert_string = '{0}, {1}'.format(insert_string, column_name)
+            select_string = '{0}, t.{1}'.format(select_string, column_name)
+
+        where_string = 't.{0} = f.{0}'.format(p_keys[0])
+        for key_name in p_keys[1:]:
+            where_string = '{0} AND t.{1} = f.{1}'.format(where_string,
+                                                          key_name)
+        with self.cache_engine.begin() as cn:
+            sql = """INSERT INTO "{final_table}" ({insert_string})
+                     SELECT {select_string}
+                     FROM "{temp_table}" t
+                     WHERE NOT EXISTS
+                        (SELECT 1 FROM "{final_table}" f
+                        WHERE {where_string})""".format(
+                            final_table=table_name,
+                            temp_table=temp_table_name,
+                            insert_string=insert_string,
+                            select_string=select_string,
+                            where_string=where_string)
+            cn.execute(sql)
+            cn.execute('DROP TABLE IF EXISTS {temp}'.format(
+                temp=temp_table_name))
+
     def dataframe_to_sql(self, cache_df):
-        cache = cache_df['keyword', 'id']
-        cache = cache.rename(index='str', columns={'id', 'comment_id'})
+        cache = cache_df[['keyword', 'id']]
+        cache = cache.rename(columns={'id': 'comment_id'})
 
-        comments = cache_df['id', 'author', 'timestamp', 'text']
+        comments = cache_df[['id', self.community_title, 'author', 'timestamp', 'text']]
 
-        temp_engine = sqlalchemy.create_engine('sqlite://')
-        cache.to_sql('temp', temp_engine,
-                     if_exists='append', index=False)
+        self.merge_dataframe_into_table(cache, self.collector_name,
+                                        ['comment_id', 'keyword'])
+        self.merge_dataframe_into_table(comments, self.comment_table_name,
+                                        ['id'])
 
-        comments.to_sql('temp', temp_engine,
-                        if_exists='append', index=False)
-        self.session.merge(temp_engine)
+        # cache.to_sql('temp', self.cache_engine,
+        #              if_exists='replace', index=False)
+        # with self.cache_engine.begin() as cn:
+        #     sql = """INSERT INTO {final_table} (keyword, comment_id)
+        #              SELECT t.keyword, t.comment_id
+        #              FROM {temp_table} t
+        #              WHERE NOT EXISTS
+        #                 (SELECT 1 FROM {final_table} f
+        #                 WHERE t.comment_id = f.comment_id
+        #                 AND t.keyword = f.keyword)""".format(
+        #                     final_table=self.collector_name,
+        #                     temp_table='temp')
+        #     cn.execute(sql)
+        #
+        # comments.to_sql('temp', self.cache_engine,
+        #                 if_exists='replace', index=False)
+        # with self.cache_engine.begin() as cn:
+        #     sql = """INSERT INTO "{final_table}" (id, {community}, author, timestamp, text)
+        #              SELECT t.id, t.{community}, t.author, t.timestamp, t.text
+        #              FROM {temp_table} t
+        #              WHERE NOT EXISTS
+        #                 (SELECT 1 FROM "{final_table}" f
+        #                 WHERE t.id = f.id)""".format(
+        #                     final_table=self.comment_table_name,
+        #                     temp_table='temp',
+        #                     community=self.community_title)
+        #     cn.execute(sql)
 
     def sql_to_dataframe(self, interval_start, interval_end):
         # load data from cache
@@ -351,9 +416,6 @@ class CommentCollector(DataCollector):
 
         # return cached data as dataframe
         return cache_df
-
-    def remove_interval_from_cache(self, interval_start, interval_end):
-        pass
 
     def interval_sql_query(self, interval_start, interval_end):
         # generate the sql query for retrieving cached data
@@ -391,8 +453,11 @@ class CommentCollector(DataCollector):
             # outdated data if it is a long query. potentially move this to the
             # query loop
             if upper_bound > datetime.utcnow():
-                upper_bound = datetime.utcnow()
+                time_since_epoch = datetime.utcnow() - self.epoch
+                num_intervals = time_since_epoch // self.data_resolution
 
+                upper_bound = (num_intervals *
+                               self.data_resolution) + self.epoch
             # define interval
             interval = [lower_bound, upper_bound]
 

@@ -6,7 +6,7 @@ import pandas as pd
 
 class RedditComments(CommentCollector):
     def __init__(self, keyword, start_date, end_date, sample_interval='31d',
-                 resample_interval='1h', subreddit='cryptocurrency'):
+                 data_resolution='1h', subreddit='cryptocurrency'):
 
         # call the init functions of the parent class
         super().__init__(collector_name='reddit',
@@ -14,7 +14,7 @@ class RedditComments(CommentCollector):
                          start_date=start_date,
                          end_date=end_date,
                          sample_interval=sample_interval,
-                         resample_interval=resample_interval,
+                         data_resolution=data_resolution,
                          community_title='subreddit')
 
         # defining class attributes
@@ -64,12 +64,12 @@ class RedditComments(CommentCollector):
         # no error handling required as of now
         raise
 
-    def remove_interval_from_cache(self, interval_start, interval_end):
-        # remove interval from cache if there is duplicate data
-        query = self.interval_sql_query(interval_start, interval_end)
-        query.delete(synchronize_session=False)
-        self.session.commit()
-
+    # def remove_interval_from_cache(self, interval_start, interval_end):
+    #     # remove interval from cache if there is duplicate data
+    #     query = self.interval_sql_query(interval_start, interval_end)
+    #     query.delete(synchronize_session=False)
+    #     self.session.commit()
+    #
 
 
 
