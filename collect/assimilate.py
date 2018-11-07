@@ -1,5 +1,6 @@
 from . import google
 from . import reddit
+from . import fourchan
 # import pandas as pd
 
 
@@ -17,16 +18,19 @@ class DataAssimilator(object):
     def add_reddit_comments(self):
         self.add_collector(reddit.RedditComments)
 
+    def add_fourchan_comments(self):
+        self.add_collector(fourchan.FourChanComments)
+
     def add_collector(self, collector):
         for keyword in self.keyword_list:
             data_collector = collector(keyword=keyword,
                                        start_date=self.start_date,
                                        end_date=self.end_date)
             data_collector.query_data()
-            data = data_collector.get_dataframe()
+            # data = data_collector.get_dataframe()
 
-            if any(data):
-                self.assimilated_dfs.append(data)
+            # if any(data):
+            #     self.assimilated_dfs.append(data)
 
     def get_data(self):
         return  # pd.concat(self.assimilated_dfs, axis='columns')

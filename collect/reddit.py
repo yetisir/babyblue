@@ -64,15 +64,6 @@ class RedditComments(CommentCollector):
         # no error handling required as of now
         raise
 
-    # def remove_interval_from_cache(self, interval_start, interval_end):
-    #     # remove interval from cache if there is duplicate data
-    #     query = self.interval_sql_query(interval_start, interval_end)
-    #     query.delete(synchronize_session=False)
-    #     self.session.commit()
-    #
-
-
-
         # comment_list = []
         # for comment in results_gen:
         #     comment_list.append(

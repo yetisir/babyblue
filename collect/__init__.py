@@ -103,8 +103,8 @@ class DataCollector(object):
         print(fmt_str.format(message='{message}:'.format(message=message),
                              collector=self.collector_name,
                              keyword=self.keyword,
-                             start=interval_start.date(),
-                             end=interval_end.date()), end='\r')
+                             start=interval_start,
+                             end=interval_end), end='\r')
 
         # record the current source of this message
         self.display_source = self.source
@@ -274,9 +274,14 @@ class DataCollector(object):
 
     def update_coverage(self, interval_start, interval_end):
         # merge coverage list with current interval
+        time_since_epoch = datetime.utcnow() - self.epoch
+        num_intervals = time_since_epoch // self.data_resolution
+
+        bound = (num_intervals *
+                 self.data_resolution) + self.epoch
 
         self.update_coverage_list(interval_start,
-                                  min(datetime.utcnow(), interval_end))
+                                  min(bound, interval_end))
 
         # convert coverge list to dataframe
         coverage_df = pd.DataFrame(self.coverage, columns=['query_start',
@@ -458,6 +463,7 @@ class CommentCollector(DataCollector):
 
                 upper_bound = (num_intervals *
                                self.data_resolution) + self.epoch
+
             # define interval
             interval = [lower_bound, upper_bound]
 

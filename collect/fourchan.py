@@ -1,62 +1,82 @@
 from . import CommentCollector
 from psaw import PushshiftAPI
-from datetime import timezone
 import pandas as pd
+
+from datetime import datetime
+from bs4 import BeautifulSoup
+import requests
 
 
 class FourChanComments(CommentCollector):
     def __init__(self, keyword, start_date, end_date, sample_interval='31d',
-                 resample_interval='1h', board='biz'):
+                 data_resolution='1h', board='biz'):
 
         # call the init functions of the parent class
-        super().__init__(collector_name='reddit-comments',
+        super().__init__(collector_name='fourchan',
                          keyword=keyword,
                          start_date=start_date,
                          end_date=end_date,
                          sample_interval=sample_interval,
-                         resample_interval=resample_interval,
+                         data_resolution=data_resolution,
                          community_title='board')
 
         # defining class attributes
-        self.reddit = PushshiftAPI()
         self.board = board
-
-        # get the intervals that have already been queried previously and are
-        # in the sqlite cache
-        self.load_coverage()
+        self.base_url = 'https://warosu.org/{board}/?'.format(board=self.board)
 
     def download_to_dataframe(self, interval_start, interval_end):
-        # download comments over a given interval
-        results_gen = self.reddit.search_comments(
-            q=self.keyword,
-            subreddit=self.subreddit,
-            filter=['id', 'subreddit', 'author', 'created_utc', 'body'],
-            after=int(interval_start.replace(
-                tzinfo=timezone.utc).timestamp()),
-            before=int(interval_end.replace(
-                tzinfo=timezone.utc).timestamp()))
+        args = {'task': 'search2',
+                'search_text': self.keyword,
+                'search_datefrom': interval_start,
+                'search_dateto': interval_end,
+                'offset': 0}
 
-        # convert downlaoded data to a pandas dataframe
-        cache_df = pd.DataFrame(results_gen)
+        text_list = []
+        id_list = []
+        time_list = []
 
-        # if there is no data, return the empty dataframe as is
-        if cache_df.empty:
-            return cache_df
+        while 1:
+            url = self.base_url
 
-        # adding the keyword field to the dataframe
+            for arg, value in args.items():
+                url = '{url}{arg}={value}&'.format(url=url, arg=arg,
+                                                   value=value)
+
+            page = requests.get(url)
+
+            soup = BeautifulSoup(page.content, 'html.parser')
+
+            comments = soup.find_all('blockquote')
+            for comment_text in comments:
+                comment = comment_text.parent
+
+                id = comment.attrs['id']
+                time = comment.find(class_='posttime').attrs['title']
+                time = datetime.utcfromtimestamp(int(time)/1000.0)
+                text = comment.find('blockquote')
+                [t.extract() for t in text('a')]
+                text = text.get_text()
+
+                text_list.append(text)
+                id_list.append(id)
+                time_list.append(time)
+
+            num_comments = len(list(comments))
+
+            if num_comments == 0:
+                break
+            else:
+                args['offset'] += num_comments
+
+        cache_df = pd.DataFrame(list(zip(text_list, id_list, time_list)),
+                                columns=['text', 'id', 'timestamp'])
         cache_df['keyword'] = self.keyword
-
-        # renaming fields for convenience
-        cache_df = cache_df.rename(columns={'created_utc': 'timestamp',
-                                            'body': 'text'})
-
-        # convert the timestamps to datetime objects
-        cache_df['timestamp'] = pd.to_datetime(cache_df['timestamp'], unit='s')
-
+        cache_df['board'] = self.board
+        cache_df['author'] = 'anon'
         # reorder the fields to be consistent with sqlite cache
         cache_df = cache_df[['keyword',
                              'id',
-                             'subreddit',
+                             'board',
                              'author',
                              'timestamp',
                              'text']]
