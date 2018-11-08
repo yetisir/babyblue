@@ -62,6 +62,8 @@ class DataCollector(object):
         # variable for dispalying status
         self.display_source = ''
 
+        self.status_start = None
+
     def query_data(self):
 
         # obtain set of intervals to query
@@ -71,26 +73,25 @@ class DataCollector(object):
         for interval_start, interval_end in intervals:
 
             # query the specified interval
-            cache_df = self.query_interval(interval_start, interval_end)
+            self.query_interval(interval_start, interval_end)
 
-            # TO DO: all this - merge data - maybe move to separate class
-            # merge data if specified and not the first interval
-            # if self.overlap_interval and len(self.keyword_df):
-            #     self.merge_overlap()
+        # load full dataset from sqlite database
+        self.status('LOADING FROM CACHE', self.start_date, self.end_date)
+        self.keyword_df = self.sql_to_dataframe(self.start_date, self.end_date)
 
-            # concatenate the interval to the dataframe
-            # if len(self.keyword_df):
-            #     self.keyword_df = self.keyword_df.append(cache_df,
-            #                                              sort=False)
-            # else:
-            #     self.keyword_df = cache_df
-
-            self.keyword_df = cache_df
-        # chop dataframe to originally requested size
-        # self.keyword_df = self.keyword_df.loc[self.start_date:self.end_date]
         self.next_status()
 
     def status(self, message, interval_start, interval_end):
+        self.source = message
+
+        time_since_epoch = datetime.utcnow() - self.epoch
+        num_intervals = time_since_epoch // self.data_resolution
+        interval_end = (num_intervals *
+                        self.data_resolution) + self.epoch
+
+        if self.status_start:
+            interval_start = self.status_start
+
         # define display format for messages
         fmt_str = ('{message: <20} {collector} - {keyword: <15} | '
                    '{start} to {end}')
@@ -109,33 +110,28 @@ class DataCollector(object):
         # record the current source of this message
         self.display_source = self.source
 
+        self.status_start = interval_start
+
     def next_status(self):
         # adds a new line for updating the next status message
         print()
+        self.status_start = None
 
     def query_interval(self, interval_start, interval_end):
-        # download the interval again if it does not exist or is incomplete
-        # sql to dataframe is defined by child class
-        cache_df = self.sql_to_dataframe(interval_start, interval_end)
 
         # check to see if cache is complete based on the specified interval
         # if cache is complete, load it from db, otherwise download
         # is_chache_complete is defined by child class
-        if self.is_cache_complete(interval_start, interval_end, cache_df):
+        if self.is_cache_complete(interval_start, interval_end):
 
             # updating source for status update
-            self.source = 'cache'
-            self.status('LOADING FROM CACHE', interval_start, interval_end)
-
-            # return the downloaded dataframe
-            return cache_df
-
+            self.status('FOUND IN CACHE', interval_start, interval_end)
+            return
         # if the cache does not exists or is not complete, attempt to download
         # the data from the server.
         try:
 
             # update status source and display status
-            self.source = 'download'
             self.status('DOWNLOADING', interval_start, interval_end)
 
             # download the data for the interval specified and return as df
@@ -145,23 +141,16 @@ class DataCollector(object):
             # save the downloaded data to the sqlite cache
             self.cache_interval(interval_start, interval_end, cache_df)
 
-            # return the downloaded data as a dataframe
-            return cache_df
-
         # catch the exception and pass to child class
         except Exception as error:
 
             # update status source and display status
-            self.source = 'failed'
             self.status('DOWNLOAD FAILED', interval_start, interval_end)
 
             # call function to handle the error
             # handle_download_error method is defined by the child class
             cache_df = self.handle_download_error(interval_start,
                                                   interval_end, error)
-
-            # return downloaded data as a dataframe
-            return cache_df
 
     def create_cache_engine(self):
         # full path to the cache database
@@ -195,7 +184,7 @@ class DataCollector(object):
         # return the dataframe with the collected data
         return self.keyword_df
 
-    def is_cache_complete(self, interval_start, interval_end, cache_df):
+    def is_cache_complete(self, interval_start, interval_end):
         # test if the interval is contained within the bounds of any of the
         # coverage intervals
         max_coverage_end = datetime.utcfromtimestamp(0)
@@ -385,34 +374,6 @@ class CommentCollector(DataCollector):
         self.merge_dataframe_into_table(comments, self.comment_table_name,
                                         ['id'])
 
-        # cache.to_sql('temp', self.cache_engine,
-        #              if_exists='replace', index=False)
-        # with self.cache_engine.begin() as cn:
-        #     sql = """INSERT INTO {final_table} (keyword, comment_id)
-        #              SELECT t.keyword, t.comment_id
-        #              FROM {temp_table} t
-        #              WHERE NOT EXISTS
-        #                 (SELECT 1 FROM {final_table} f
-        #                 WHERE t.comment_id = f.comment_id
-        #                 AND t.keyword = f.keyword)""".format(
-        #                     final_table=self.collector_name,
-        #                     temp_table='temp')
-        #     cn.execute(sql)
-        #
-        # comments.to_sql('temp', self.cache_engine,
-        #                 if_exists='replace', index=False)
-        # with self.cache_engine.begin() as cn:
-        #     sql = """INSERT INTO "{final_table}" (id, {community}, author, timestamp, text)
-        #              SELECT t.id, t.{community}, t.author, t.timestamp, t.text
-        #              FROM {temp_table} t
-        #              WHERE NOT EXISTS
-        #                 (SELECT 1 FROM "{final_table}" f
-        #                 WHERE t.id = f.id)""".format(
-        #                     final_table=self.comment_table_name,
-        #                     temp_table='temp',
-        #                     community=self.community_title)
-        #     cn.execute(sql)
-
     def sql_to_dataframe(self, interval_start, interval_end):
         # load data from cache
         query = self.interval_sql_query(interval_start, interval_end)
@@ -458,11 +419,7 @@ class CommentCollector(DataCollector):
             # outdated data if it is a long query. potentially move this to the
             # query loop
             if upper_bound > datetime.utcnow():
-                time_since_epoch = datetime.utcnow() - self.epoch
-                num_intervals = time_since_epoch // self.data_resolution
-
-                upper_bound = (num_intervals *
-                               self.data_resolution) + self.epoch
+                upper_bound = datetime.utcnow()
 
             # define interval
             interval = [lower_bound, upper_bound]
