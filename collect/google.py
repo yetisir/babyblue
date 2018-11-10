@@ -231,13 +231,11 @@ class GoogleTrends(GoogleTrendsCollector):
         else:
             data_df = self.sql_to_dataframe(self.start_date, self.end_date)
 
-        self.merge_overlap(data_df)
+        return self.merge_overlap(data_df)
 
     def merge_overlap(self, data_df):
 
         intervals = self.download_intervals()
-
-        print(intervals)
 
         keyword_df = pd.DataFrame()
         for interval_start, interval_end in intervals:
@@ -248,34 +246,33 @@ class GoogleTrends(GoogleTrendsCollector):
                                   (data_df['data_start'] <
                                    interval_end)].copy()
 
+            interval_df = interval_df.set_index('data_start')
+
             if keyword_df.empty:
                 keyword_df = interval_df
 
             else:
-                previous_times = set(keyword_df['data_start'])
-                interval_times = set(interval_df['data_start'])
+                previous_times = keyword_df.index
+                interval_times = interval_df.index
 
                 overlap = previous_times.intersection(interval_times)
 
-                top_overlap_df = keyword_df.loc[
-                    keyword_df['data_start'].isin(overlap)]
-                bottom_overlap_df = interval_df.loc[
-                    interval_df['data_start'].isin(overlap)]
-
-                print(sorted(list(previous_times)))
-                print(sorted(list(interval_times)))
-                print(overlap)
+                top_overlap_df = keyword_df.loc[overlap]
+                bottom_overlap_df = interval_df.loc[overlap]
 
                 normalization_factor = (top_overlap_df['trend'].mean() /
                                         bottom_overlap_df['trend'].mean())
-                interval_df.ix[:, 'trend'] = (interval_df.ix[:, 'trend'] *
-                                              normalization_factor)
+                interval_df.loc[:, 'trend'] *= normalization_factor
 
-                interval_df = interval_df.loc[interval_df['data_start'] >
-                                              interval_start +
-                                              self.overlap_interval]
+                interval_df = interval_df.loc[interval_start +
+                                              self.overlap_interval:]
 
-                keyword_df.append(interval_df)
+                keyword_df = keyword_df.append(interval_df)
 
-        keyword_df = keyword_df[['data_start', 'trend']]
-        print(keyword_df.to_string())
+        keyword_df = keyword_df[['trend']]
+        keyword_df = keyword_df.rename(index=str,
+                                       columns={'trend':
+                                                'gtrend_"{0}"'.format(
+                                                    self.keyword)})
+
+        return keyword_df
