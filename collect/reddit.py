@@ -4,7 +4,7 @@ from datetime import timezone
 import pandas as pd
 
 
-class RedditComments(CommentCollector):
+class RedditCommentCollector(CommentCollector):
     def __init__(self, keyword, start_date, end_date, sample_interval='31d',
                  data_resolution='1h', subreddit='cryptocurrency'):
 

@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 import requests
 
 
-class FourChanComments(CommentCollector):
+class FourChanCommentCollector(CommentCollector):
     def __init__(self, keyword, start_date, end_date, sample_interval='31d',
                  data_resolution='1h', board='biz'):
 

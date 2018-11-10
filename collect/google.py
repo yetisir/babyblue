@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, DateTime, Boolean, String
 
 
-class GoogleTrends(DataCollector):
+class GoogleTrendsCollector(DataCollector):
     def __init__(self, keyword, start_date, end_date, category=0,
                  sample_interval='5d', overlap_interval='1d',
                  data_resolution='1h', wait=1, sleep=00):
@@ -160,7 +160,8 @@ class GoogleTrends(DataCollector):
         query = self.session.query(self.cache_table)
         query = query.filter(
             (self.cache_table.keyword == self.keyword),
-            (self.cache_table.query_start == interval_start),
+            (self.cache_table.query_start >= interval_start),
+            (self.cache_table.query_start < interval_end),
             (self.cache_table.query_interval ==
              ((self.sample_interval + self.overlap_interval) + self.epoch)),
             (self.cache_table.data_start >= interval_start),
@@ -208,37 +209,73 @@ class GoogleTrends(DataCollector):
         # return list of intervals
         return intervals
 
-    # def merge_overlap(self):
-    #     pass
-        # # get timedelta of existing data
-        # df_time_range = self.keyword_df.index[-1] - self.keyword_df.index[0]
-        #
-        # # select all of overalp data if it exists
-        # if df_time_range > self.overlap_interval:
-        #     overlap_start = self.interval_start
-        #     overlap_end = self.interval_start + self.overlap_interval
-        #
-        # # otherwise only select range of existing data to merge
-        # else:
-        #     overlap_start = self.keyword_df.index[0]
-        #     overlap_end = self.keyword_df.index[-1]
-        #
-        # # get overlapping series
-        # previous_interval_overlap = self.keyword_df.loc[overlap_start:,
-        #                                                 self.keyword]
-        # current_interval_overlap = self.interval_df.loc[:overlap_end,
-        #                                                 self.keyword]
-        #
-        # # get averages of overlapping series
-        # previous_average = previous_interval_overlap.mean()
-        # current_average = current_interval_overlap.mean()
-        #
-        # # normalize new interval based on the overlap with the old interval
-        # self.interval_df.loc[:, self.keyword] = (
-        #     self.interval_df[self.keyword] * (previous_average /
-        #                                       current_average))
-        #
-        # # chop off overlapping data from new interval
-        # self.interval_df = self.interval_df.loc[(self.interval_start +
-        #                                          self.overlap_interval):]
-        # self.interval_df = self.interval_df.loc[self.interval_df.index[1]:]
+
+class GoogleTrends(GoogleTrendsCollector):
+    def __init__(self, keyword, start_date, end_date, category=0,
+                 sample_interval='5d', overlap_interval='1d',
+                 data_resolution='1h', wait=1, sleep=00):
+
+        # call the init functions of the parent class
+        super().__init__(keyword=keyword,
+                         start_date=start_date,
+                         end_date=end_date,
+                         category=category,
+                         sample_interval=sample_interval,
+                         data_resolution=data_resolution,
+                         wait=wait,
+                         sleep=sleep)
+
+    def compile(self, download=True):
+        if download:
+            data_df = self.query_data()
+        else:
+            data_df = self.sql_to_dataframe(self.start_date, self.end_date)
+
+        self.merge_overlap(data_df)
+
+    def merge_overlap(self, data_df):
+
+        intervals = self.download_intervals()
+
+        print(intervals)
+
+        keyword_df = pd.DataFrame()
+        for interval_start, interval_end in intervals:
+            interval_df = data_df[(data_df['query_start'] ==
+                                   interval_start) &
+                                  (data_df['data_start'] >=
+                                   interval_start) &
+                                  (data_df['data_start'] <
+                                   interval_end)].copy()
+
+            if keyword_df.empty:
+                keyword_df = interval_df
+
+            else:
+                previous_times = set(keyword_df['data_start'])
+                interval_times = set(interval_df['data_start'])
+
+                overlap = previous_times.intersection(interval_times)
+
+                top_overlap_df = keyword_df.loc[
+                    keyword_df['data_start'].isin(overlap)]
+                bottom_overlap_df = interval_df.loc[
+                    interval_df['data_start'].isin(overlap)]
+
+                print(sorted(list(previous_times)))
+                print(sorted(list(interval_times)))
+                print(overlap)
+
+                normalization_factor = (top_overlap_df['trend'].mean() /
+                                        bottom_overlap_df['trend'].mean())
+                interval_df.ix[:, 'trend'] = (interval_df.ix[:, 'trend'] *
+                                              normalization_factor)
+
+                interval_df = interval_df.loc[interval_df['data_start'] >
+                                              interval_start +
+                                              self.overlap_interval]
+
+                keyword_df.append(interval_df)
+
+        keyword_df = keyword_df[['data_start', 'trend']]
+        print(keyword_df.to_string())

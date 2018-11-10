@@ -26,7 +26,7 @@ class DataAssimilator(object):
             data_collector = collector(keyword=keyword,
                                        start_date=self.start_date,
                                        end_date=self.end_date)
-            data_collector.query_data()
+            data = data_collector.compile()
             # data = data_collector.get_dataframe()
 
             # if any(data):

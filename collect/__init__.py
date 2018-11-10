@@ -31,9 +31,6 @@ class DataCollector(object):
         self.sample_interval = pd.to_timedelta(sample_interval)
         self.data_resolution = pd.to_timedelta(data_resolution)
 
-        # initialize empty dataframe to store all collected data
-        self.keyword_df = pd.DataFrame()
-
         # initialize sqlite database for caching downloaded data
         self.cache_engine = self.create_cache_engine()
 
@@ -77,9 +74,11 @@ class DataCollector(object):
 
         # load full dataset from sqlite database
         self.status('LOADING FROM CACHE', self.start_date, self.end_date)
-        self.keyword_df = self.sql_to_dataframe(self.start_date, self.end_date)
+        keyword_df = self.sql_to_dataframe(intervals[0][0], intervals[-1][-1])
 
         self.next_status()
+
+        return keyword_df
 
     def status(self, message, interval_start, interval_end):
         self.source = message
@@ -89,7 +88,7 @@ class DataCollector(object):
         interval_end = (num_intervals *
                         self.data_resolution) + self.epoch
 
-        if self.status_start:
+        if self.status_start and self.display_source == self.source:
             interval_start = self.status_start
 
         # define display format for messages
@@ -152,6 +151,10 @@ class DataCollector(object):
             cache_df = self.handle_download_error(interval_start,
                                                   interval_end, error)
 
+        # save the downloaded data to the sqlite cache
+        if cache_df is not None:
+            self.cache_interval(interval_start, interval_end, cache_df)
+
     def create_cache_engine(self):
         # full path to the cache database
         cache_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
@@ -178,11 +181,6 @@ class DataCollector(object):
 
         # run any post-cache routiens defined in the child class
         self.post_cache_routine(interval_start, interval_end)
-
-    def get_dataframe(self):
-
-        # return the dataframe with the collected data
-        return self.keyword_df
 
     def is_cache_complete(self, interval_start, interval_end):
         # test if the interval is contained within the bounds of any of the
