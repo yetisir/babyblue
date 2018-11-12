@@ -13,7 +13,7 @@ if __name__ == '__main__':
                  # 'ETH': 'ethereum',
                  # 'XRP': 'ripple',
                  # 'BCH': 'bitcoin cash',
-                 # 'EOS': 'eos',
+                 'EOS': 'eos',
                  # 'XLM': 'stellar',
                  # 'LTC': 'litecoin',
                  # 'ADA': 'cardano',
@@ -21,7 +21,7 @@ if __name__ == '__main__':
                  # 'TRX': 'tron',
                  # 'MIOTA': 'iota',
                  # 'DASH': 'dash',
-                 'BNB': 'binance',
+                 # 'BNB': 'binance',
                  # 'NEO': 'neo',
                  # 'ETC': 'ethereum classic'
                  }
