@@ -2,12 +2,11 @@ from . import CommentCollector
 from psaw import PushshiftAPI
 from datetime import timezone
 import pandas as pd
-from scipy import signal, ndimage
 
 # from textblob import TextBlob
 
 
-class RedditCommentCollector(CommentCollector):
+class RedditComments(CommentCollector):
     def __init__(self, keyword, start_date, end_date, sample_interval='31d',
                  data_resolution='1h', subreddit='cryptocurrency'):
 
@@ -66,42 +65,3 @@ class RedditCommentCollector(CommentCollector):
     def handle_download_error(self, interval_start, interval_end, error):
         # no error handling required as of now
         raise
-
-
-class RedditComments(RedditCommentCollector):
-    def __init__(self, keyword, start_date, end_date, sample_interval='31d',
-                 data_resolution='1h', subreddit='cryptocurrency'):
-
-        super().__init__(keyword=keyword,
-                         start_date=start_date,
-                         end_date=end_date,
-                         sample_interval=sample_interval,
-                         data_resolution=data_resolution,
-                         subreddit=subreddit)
-
-    def compile(self, download=True):
-        if download:
-            data_df = self.query_data()
-        else:
-            data_df = self.sql_to_dataframe(self.start_date, self.end_date)
-
-        mention_column_name = 'reddit_mentions_"{0}"'.format(self.keyword)
-        data_df[mention_column_name] = data_df['text'].apply(
-            self.count_keyword_mentions)
-        # sent = data_df['text'].apply(self.analyze_sentiment)
-
-        data_df = data_df.set_index('timestamp')
-        data_df = data_df.resample(self.data_resolution).sum()
-        data_df.index.names = ['data_start']
-        data_df = data_df[[mention_column_name]]
-        data_df[mention_column_name] = self.bandpass_filter(data_df[mention_column_name])
-        data_df[mention_column_name] = self.gaussian_filter(data_df[mention_column_name])
-
-        data_df = self.normalize_dataframe(data_df)
-        return data_df[self.start_date:self.end_date]
-
-    def count_keyword_mentions(self, text):
-        return text.lower().count(self.keyword)
-
-    def analyze_sentiment(self, text):
-        return None  # TextBlob(text).sentiment

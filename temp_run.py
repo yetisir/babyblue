@@ -9,8 +9,8 @@ if __name__ == '__main__':
     cf.go_offline()
 
     coin_list = {
-                 'BTC': 'bitcoin',
-                 'ETH': 'ethereum',
+                 # 'BTC': 'bitcoin',
+                 # 'ETH': 'ethereum',
                  # 'XRP': 'ripple',
                  # 'BCH': 'bitcoin cash',
                  # 'EOS': 'eos',
@@ -21,7 +21,7 @@ if __name__ == '__main__':
                  # 'TRX': 'tron',
                  # 'MIOTA': 'iota',
                  # 'DASH': 'dash',
-                 # 'BNB': 'binance',
+                 'BNB': 'binance',
                  # 'NEO': 'neo',
                  # 'ETC': 'ethereum classic'
                  }
@@ -34,7 +34,7 @@ if __name__ == '__main__':
     assimilator = DataAssimilator(coin_list, start_date, end_date)
     assimilator.add_google_trends()
     assimilator.add_reddit_comments()
-    # assimilator.add_fourchan_comments()
+    assimilator.add_fourchan_comments()
     data = assimilator.get_data()
 
     layout = go.Layout(showlegend=True)

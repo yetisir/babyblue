@@ -286,6 +286,14 @@ class DataCollector(object):
         coverage_df.to_sql(self.coverage_table_name, self.cache_engine,
                            if_exists='append', index=False)
 
+    def compile(self, download=True):
+        if download:
+            data_df = self.query_data()
+        else:
+            data_df = self.sql_to_dataframe(self.start_date, self.end_date)
+
+        processed_df = self.process_raw_data(data_df)
+        return processed_df[self.start_date:self.end_date]
 
 class CommentCollector(DataCollector):
     def __init__(self, keyword, start_date, end_date, collector_name,
@@ -448,3 +456,21 @@ class CommentCollector(DataCollector):
 
         # return list of intervals
         return intervals
+
+    def process_raw_data(self, data_df):
+        data_df['mentions'] = data_df['text'].apply(
+            self.count_keyword_mentions)
+        # data_df['sentiment'] = data_df['text'].apply(self.analyze_sentiment)
+
+        data_df = data_df.set_index('timestamp')
+        data_df = data_df.resample(self.data_resolution).sum()
+        data_df.index.names = ['data_start']  # TODO: check to see if shifted
+        data_df = data_df[['mentions']]
+
+        return data_df
+
+    def count_keyword_mentions(self, text):
+        return text.lower().count(self.keyword)
+
+    def analyze_sentiment(self, text):
+        return None  # TextBlob(text).sentiment

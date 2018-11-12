@@ -3,11 +3,10 @@ from pytrends.request import TrendReq
 import pandas as pd
 import time
 from datetime import datetime
-from scipy import signal
 from sqlalchemy import Column, Integer, DateTime, Boolean, String
 
 
-class GoogleTrendsCollector(DataCollector):
+class GoogleTrends(DataCollector):
     def __init__(self, keyword, start_date, end_date, category=0,
                  sample_interval='5d', overlap_interval='1d',
                  data_resolution='1h', wait=1, sleep=00):
@@ -209,41 +208,8 @@ class GoogleTrendsCollector(DataCollector):
         # return list of intervals
         return intervals
 
-
-class GoogleTrends(GoogleTrendsCollector):
-    def __init__(self, keyword, start_date, end_date, category=0,
-                 sample_interval='5d', overlap_interval='1d',
-                 data_resolution='1h', wait=1, sleep=00):
-
-        # call the init functions of the parent class
-        super().__init__(keyword=keyword,
-                         start_date=start_date,
-                         end_date=end_date,
-                         category=category,
-                         sample_interval=sample_interval,
-                         data_resolution=data_resolution,
-                         wait=wait,
-                         sleep=sleep)
-
-    def compile(self, download=True):
-        if download:
-            data_df = self.query_data()
-        else:
-            data_df = self.sql_to_dataframe(self.start_date, self.end_date)
-
+    def process_raw_data(self, data_df):
         data_df = self.merge_overlap(data_df)
-        # TODO: move filtering operations to separate_location
-        data_df['trend'] = self.bandpass_filter(data_df['trend'])
-
-        data_df = data_df.rename(columns={'trend':
-                                          'gtrend_"{0}"'.format(self.keyword)})
-        # data_df = data_df.rename(index=str,
-        #                          columns={'trend':
-        #                                   'gtrend_"{0}"'.format(self.keyword),
-        #                                   'filtered_trend':
-        #                                   'filt_gtrend_"{0}"'.format(
-        #                                       self.keyword)})
-        data_df = self.normalize_dataframe(data_df)
 
         return data_df.loc[self.start_date:self.end_date]
 
@@ -284,11 +250,3 @@ class GoogleTrends(GoogleTrendsCollector):
 
         keyword_df = keyword_df[['trend']]
         return keyword_df
-
-    def bandpass_filter(self, data, freq=1/24.0, quality=0.05):
-        b, a = signal.iirnotch(freq, quality)
-        y = abs(signal.filtfilt(b, a, data))
-        return y
-
-    def normalize_dataframe(self, df):
-        return (df - df.min()) / (df.max() - df.min())

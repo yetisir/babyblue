@@ -1,5 +1,4 @@
 from . import CommentCollector
-from psaw import PushshiftAPI
 import pandas as pd
 
 from datetime import datetime
@@ -7,7 +6,7 @@ from bs4 import BeautifulSoup
 import requests
 
 
-class FourChanCommentCollector(CommentCollector):
+class FourChanComments(CommentCollector):
     def __init__(self, keyword, start_date, end_date, sample_interval='31d',
                  data_resolution='1h', board='biz'):
 
