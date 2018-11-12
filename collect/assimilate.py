@@ -12,6 +12,8 @@ class DataAssimilator(object):
         self.start_date = start_date
         self.end_date = end_date
 
+        self.data_dfs = []
+
     def add_google_trends(self):
         self.add_collector(google.GoogleTrends)
 
@@ -23,24 +25,20 @@ class DataAssimilator(object):
 
     def add_collector(self, collector):
 
-        data_dfs = []
         for keyword in self.keyword_list:
             data_collector = collector(keyword=keyword,
                                        start_date=self.start_date,
                                        end_date=self.end_date)
             data = data_collector.compile()
-            # data = data_collector.get_dataframe()
 
             if data is not None:
-                data_dfs.append(data)
+                self.data_dfs.append(data)
 
-        index_name = data_dfs[0].index.name
+    def get_data(self):
+        index_name = 'data_start'
         assimilated_df = functools.reduce(lambda left, right:
                                           pd.merge(left, right,
                                                    on=index_name, how='outer'),
-                                          data_dfs)
+                                          self.data_dfs)
 
-        self.assimilated_df = assimilated_df
-
-    def get_data(self):
-        return self.assimilated_df
+        return assimilated_df

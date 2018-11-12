@@ -365,7 +365,8 @@ class CommentCollector(DataCollector):
         cache = cache_df[['keyword', 'id']]
         cache = cache.rename(columns={'id': 'comment_id'})
 
-        comments = cache_df[['id', self.community_title, 'author', 'timestamp', 'text']]
+        comments = cache_df[['id', self.community_title, 'author', 'timestamp',
+                             'text']]
 
         self.merge_dataframe_into_table(cache, self.collector_name,
                                         ['comment_id', 'keyword'])
@@ -383,8 +384,9 @@ class CommentCollector(DataCollector):
 
     def interval_sql_query(self, interval_start, interval_end):
         # generate the sql query for retrieving cached data
-        query = self.session.query(self.cache_table)
-        query = query.outerjoin(self.comment_table)
+        query = self.session.query(self.cache_table, self.comment_table)
+        query = query.outerjoin(self.comment_table, self.comment_table.id ==
+                                self.cache_table.comment_id)
         query = query.filter(
             self.cache_table.keyword == self.keyword,
             self.comment_table.timestamp >= interval_start,

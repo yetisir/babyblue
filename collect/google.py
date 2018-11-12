@@ -3,7 +3,7 @@ from pytrends.request import TrendReq
 import pandas as pd
 import time
 from datetime import datetime
-
+from scipy import signal
 from sqlalchemy import Column, Integer, DateTime, Boolean, String
 
 
@@ -231,7 +231,21 @@ class GoogleTrends(GoogleTrendsCollector):
         else:
             data_df = self.sql_to_dataframe(self.start_date, self.end_date)
 
-        return self.merge_overlap(data_df)
+        data_df = self.merge_overlap(data_df)
+        # TODO: move filtering operations to separate_location
+        data_df['trend'] = self.bandpass_filter(data_df['trend'])
+
+        data_df = data_df.rename(columns={'trend':
+                                          'gtrend_"{0}"'.format(self.keyword)})
+        # data_df = data_df.rename(index=str,
+        #                          columns={'trend':
+        #                                   'gtrend_"{0}"'.format(self.keyword),
+        #                                   'filtered_trend':
+        #                                   'filt_gtrend_"{0}"'.format(
+        #                                       self.keyword)})
+        data_df = self.normalize_dataframe(data_df)
+
+        return data_df.loc[self.start_date:self.end_date]
 
     def merge_overlap(self, data_df):
 
@@ -247,7 +261,6 @@ class GoogleTrends(GoogleTrendsCollector):
                                    interval_end)].copy()
 
             interval_df = interval_df.set_index('data_start')
-
             if keyword_df.empty:
                 keyword_df = interval_df
 
@@ -270,9 +283,12 @@ class GoogleTrends(GoogleTrendsCollector):
                 keyword_df = keyword_df.append(interval_df)
 
         keyword_df = keyword_df[['trend']]
-        keyword_df = keyword_df.rename(index=str,
-                                       columns={'trend':
-                                                'gtrend_"{0}"'.format(
-                                                    self.keyword)})
-
         return keyword_df
+
+    def bandpass_filter(self, data, freq=1/24.0, quality=0.05):
+        b, a = signal.iirnotch(freq, quality)
+        y = abs(signal.filtfilt(b, a, data))
+        return y
+
+    def normalize_dataframe(self, df):
+        return (df - df.min()) / (df.max() - df.min())
