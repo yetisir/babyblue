@@ -1,6 +1,5 @@
-from . import google
-from . import reddit
-from . import fourchan
+from . import google, reddit, fourchan, binance
+
 import pandas as pd
 import functools
 from scipy import signal, ndimage
@@ -45,6 +44,17 @@ class DataAssimilator(object):
             df = df.apply(self.normalize, raw=True)
 
             df = self.add_collector_label(df, '4chan')
+
+            self.data_dfs.append(df)
+
+    def add_binance_exchange(self):
+        collector_dfs = self.add_collector(binance.Binance)
+        for df in collector_dfs:
+            df = df.apply(self.notch_filter, raw=True, quality=0.5)
+            # df = df.apply(self.gaussian_filter, raw=True)
+            df = df.apply(self.normalize, raw=True)
+
+            df = self.add_collector_label(df, 'binance')
 
             self.data_dfs.append(df)
 

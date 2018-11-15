@@ -1,4 +1,5 @@
 import os
+import sys
 import pandas as pd
 from datetime import datetime, timedelta
 
@@ -8,10 +9,13 @@ from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import Column, ForeignKey, DateTime, String, Text
 from sqlalchemy.ext.declarative import declarative_base
 
+from abc import ABC, abstractmethod
 
-class DataCollector(object):
-    def __init__(self, collector_name, keyword, start_date, end_date,
-                 sample_interval, data_resolution,
+
+class DataCollector(ABC):
+
+    def __init__(self, collector_name=None, keyword=None, start_date=None,
+                 end_date=None, sample_interval=None, data_resolution=None,
                  cache_name='cache.sqlite'):
 
         # setting class attributes
@@ -83,7 +87,7 @@ class DataCollector(object):
     def status(self, message, interval_start, interval_end):
         self.source = message
 
-        time_since_epoch = datetime.utcnow() - self.epoch
+        time_since_epoch = interval_end - self.epoch
         num_intervals = time_since_epoch // self.data_resolution
         interval_end = (num_intervals *
                         self.data_resolution) + self.epoch
@@ -92,7 +96,7 @@ class DataCollector(object):
             interval_start = self.status_start
 
         # define display format for messages
-        fmt_str = ('{message: <20} {collector} - {keyword: <15} | '
+        fmt_str = ('{message: <25} {collector} - {keyword: <15} | '
                    '{start} to {end}')
 
         # add a new line if the source (ie cache or download) changes
@@ -110,6 +114,8 @@ class DataCollector(object):
         self.display_source = self.source
 
         self.status_start = interval_start
+
+        sys.stdout.flush()
 
     def next_status(self):
         # adds a new line for updating the next status message
@@ -131,14 +137,14 @@ class DataCollector(object):
         try:
 
             # update status source and display status
-            self.status('DOWNLOADING', interval_start, interval_end)
+            self.status('DOWNLOADING TO CACHE', interval_start, interval_end)
 
             # download the data for the interval specified and return as df
             # download_to_dataframe is defined by child class
             cache_df = self.download_to_dataframe(interval_start, interval_end)
 
-            # save the downloaded data to the sqlite cache
-            self.cache_interval(interval_start, interval_end, cache_df)
+            # # save the downloaded data to the sqlite cache
+            # self.cache_interval(interval_start, interval_end, cache_df)
 
         # catch the exception and pass to child class
         except Exception as error:
@@ -295,47 +301,6 @@ class DataCollector(object):
         processed_df = self.process_raw_data(data_df)
         return processed_df[self.start_date:self.end_date]
 
-class CommentCollector(DataCollector):
-    def __init__(self, keyword, start_date, end_date, collector_name,
-                 sample_interval='31d', data_resolution='1h',
-                 community_title='community'):
-
-        self.community_title = community_title
-
-        self.coverage_interval = datetime.utcfromtimestamp(0)
-
-        # call the init functions of the parent class
-        super().__init__(collector_name=collector_name,
-                         keyword=keyword,
-                         start_date=start_date,
-                         end_date=end_date,
-                         sample_interval=sample_interval,
-                         data_resolution=data_resolution)
-
-    def define_cache_table(self, Base):
-
-        # create a table to store the data that is downloaded
-        self.comment_table_name = '{0}-comments'.format(self.collector_name)
-
-        comments = {'__tablename__': self.comment_table_name,
-                    'id': Column(String(32), primary_key=True),
-                    self.community_title: Column(String(32)),
-                    'author': Column(String(32)),
-                    'timestamp': Column(DateTime),
-                    'text': Column(Text)}
-
-        self.comment_table = type('Comments', (Base, ), comments)
-
-        cache = {'__tablename__': self.collector_name,
-                 'keyword': Column('keyword', String(32),
-                                   primary_key=True),
-                 'comment_id': Column('comment_id', String(32),
-                                      ForeignKey(self.comment_table.id),
-                                      primary_key=True),
-                 'comment': relationship('Comments')}
-
-        self.cache_table = type('Cache', (Base, ), cache)
-
     def merge_dataframe_into_table(self, dataframe, table_name, p_keys):
         temp_table_name = 'temp'
 
@@ -369,45 +334,54 @@ class CommentCollector(DataCollector):
             cn.execute('DROP TABLE IF EXISTS {temp}'.format(
                 temp=temp_table_name))
 
-    def dataframe_to_sql(self, cache_df):
-        cache = cache_df[['keyword', 'id']]
-        cache = cache.rename(columns={'id': 'comment_id'})
+    @abstractmethod
+    def define_cache_table(self):
+        raise NotImplementedError
 
-        comments = cache_df[['id', self.community_title, 'author', 'timestamp',
-                             'text']]
+    @abstractmethod
+    def download_to_dataframe(self):
+        raise NotImplementedError
 
-        self.merge_dataframe_into_table(cache, self.collector_name,
-                                        ['comment_id', 'keyword'])
-        self.merge_dataframe_into_table(comments, self.comment_table_name,
-                                        ['id'])
+    @abstractmethod
+    def handle_download_error(self):
+        raise NotImplementedError
 
-    def sql_to_dataframe(self, interval_start, interval_end):
-        # load data from cache
-        query = self.interval_sql_query(interval_start, interval_end)
-        query = query.order_by('timestamp')
-        cache_df = pd.read_sql(sql=query.statement, con=self.session.bind)
+    @abstractmethod
+    def dataframe_to_sql(self):
+        raise NotImplementedError
 
-        # return cached data as dataframe
-        return cache_df
+    @abstractmethod
+    def sql_to_dataframe(self):
+        raise NotImplementedError
 
-    def interval_sql_query(self, interval_start, interval_end):
-        # generate the sql query for retrieving cached data
-        query = self.session.query(self.cache_table, self.comment_table)
-        query = query.outerjoin(self.comment_table, self.comment_table.id ==
-                                self.cache_table.comment_id)
-        query = query.filter(
-            self.cache_table.keyword == self.keyword,
-            self.comment_table.timestamp >= interval_start,
-            self.comment_table.timestamp <= interval_end)
+    @abstractmethod
+    def interval_sql_query(self):
+        raise NotImplementedError
 
-        # return the cache query
-        return query
+    @abstractmethod
+    def post_cache_routine(self):
+        raise NotImplementedError
 
-    def pre_cache_routine(self, interval_start, interval_end):
-        pass
+    @abstractmethod
+    def pre_cache_routine(self):
+        raise NotImplementedError
 
-    def post_cache_routine(self, interval_start, interval_end):
-        pass
+    @abstractmethod
+    def process_raw_data(self):
+        raise NotImplementedError
+
+    @abstractmethod
+    def download_intervals(self):
+        raise NotImplementedError
+
+
+class SequentialDataCollector(DataCollector):
+    def __init__(self, **kwargs):
+
+        self.coverage_interval = datetime.utcfromtimestamp(0)
+
+        # pass all the parameters to the Data Collector Class
+        super().__init__(**kwargs)
 
     def download_intervals(self):
         # determine the number of intervals based on the interval size
@@ -456,6 +430,81 @@ class CommentCollector(DataCollector):
 
         # return list of intervals
         return intervals
+
+
+class CommentCollector(SequentialDataCollector):
+    def __init__(self, sample_interval='31d', data_resolution='1h',
+                 community_title='community', **kwargs):
+
+        self.community_title = community_title
+
+        # call the init functions of the parent class
+        super().__init__(sample_interval=sample_interval,
+                         data_resolution=data_resolution, **kwargs)
+
+    def define_cache_table(self, Base):
+
+        # create a table to store the data that is downloaded
+        self.comment_table_name = '{0}-comments'.format(self.collector_name)
+
+        comments = {'__tablename__': self.comment_table_name,
+                    'id': Column(String(32), primary_key=True),
+                    self.community_title: Column(String(32)),
+                    'author': Column(String(32)),
+                    'timestamp': Column(DateTime),
+                    'text': Column(Text)}
+
+        self.comment_table = type('Comments', (Base, ), comments)
+
+        cache = {'__tablename__': self.collector_name,
+                 'keyword': Column('keyword', String(32),
+                                   primary_key=True),
+                 'comment_id': Column('comment_id', String(32),
+                                      ForeignKey(self.comment_table.id),
+                                      primary_key=True),
+                 'comment': relationship('Comments')}
+
+        self.cache_table = type('Cache', (Base, ), cache)
+
+    def dataframe_to_sql(self, cache_df):
+        cache = cache_df[['keyword', 'id']]
+        cache = cache.rename(columns={'id': 'comment_id'})
+
+        comments = cache_df[['id', self.community_title, 'author', 'timestamp',
+                             'text']]
+
+        self.merge_dataframe_into_table(cache, self.collector_name,
+                                        ['comment_id', 'keyword'])
+        self.merge_dataframe_into_table(comments, self.comment_table_name,
+                                        ['id'])
+
+    def sql_to_dataframe(self, interval_start, interval_end):
+        # load data from cache
+        query = self.interval_sql_query(interval_start, interval_end)
+        query = query.order_by('timestamp')
+        cache_df = pd.read_sql(sql=query.statement, con=self.session.bind)
+
+        # return cached data as dataframe
+        return cache_df
+
+    def interval_sql_query(self, interval_start, interval_end):
+        # generate the sql query for retrieving cached data
+        query = self.session.query(self.cache_table, self.comment_table)
+        query = query.outerjoin(self.comment_table, self.comment_table.id ==
+                                self.cache_table.comment_id)
+        query = query.filter(
+            self.cache_table.keyword == self.keyword,
+            self.comment_table.timestamp >= interval_start,
+            self.comment_table.timestamp <= interval_end)
+
+        # return the cache query
+        return query
+
+    def pre_cache_routine(self, interval_start, interval_end):
+        pass
+
+    def post_cache_routine(self, interval_start, interval_end):
+        pass
 
     def process_raw_data(self, data_df):
         data_df['mentions'] = data_df['text'].apply(

@@ -7,6 +7,7 @@ from sqlalchemy import Column, Integer, DateTime, Boolean, String
 
 
 class GoogleTrends(DataCollector):
+
     def __init__(self, keyword, start_date, end_date, category=0,
                  sample_interval='5d', overlap_interval='1d',
                  data_resolution='1h', wait=1, sleep=00):
@@ -96,10 +97,10 @@ class GoogleTrends(DataCollector):
         cache_df['keyword'] = self.keyword
         cache_df['query_start'] = interval_start
         cache_df['query_interval'] = (self.sample_interval +
-                                      self.overlap_interval) + self.epoch
+                                      self.overlap_interval)
         cache_df['data_start'] = pd.to_datetime(interval_df.index)
         cache_df['data_interval'] = (interval_df.index[1] -
-                                     interval_df.index[0]) + self.epoch
+                                     interval_df.index[0])
         cache_df['isPartial'] = cache_df['isPartial'].astype(bool).astype(int)
 
         cache_df = cache_df.rename(columns={self.keyword: 'trend',
@@ -138,6 +139,8 @@ class GoogleTrends(DataCollector):
             raise
 
     def dataframe_to_sql(self, cache_df):
+        cache_df['query_interval'] = cache_df['query_interval'] + self.epoch
+        cache_df['data_interval'] = cache_df['data_interval'] + self.epoch
         cache_df.to_sql(self.collector_name, self.cache_engine,
                         if_exists='append', index=False)
 
