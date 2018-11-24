@@ -115,5 +115,4 @@ class Binance(SequentialDataCollector):
         data_df = data_df.set_index('candle_start')
         data_df.index.names = ['data_start']  # TODO: check to see if shifted
         # data_df = data_df.resample(self.data_resolution).asfreq()
-
         return data_df

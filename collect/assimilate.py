@@ -7,8 +7,8 @@ import numpy as np
 
 
 class DataAssimilator(object):
-    def __init__(self, keyword_list, start_date, end_date):
-        self.keyword_list = [kw.lower() for kw in keyword_list]
+    def __init__(self, coin, start_date, end_date):
+        self.coin = coin
 
         self.start_date = start_date
         self.end_date = end_date
@@ -19,7 +19,8 @@ class DataAssimilator(object):
         collector_dfs = self.add_collector(google.GoogleTrends)
         for df in collector_dfs:
             df = df.apply(self.notch_filter, raw=True)
-            df = df.apply(self.normalize, raw=True)
+            # df = df.apply(self.gaussian_filter, raw=True)
+            # df = df.apply(self.normalize, raw=True)
 
             df = self.add_collector_label(df, 'gtrends')
 
@@ -28,9 +29,9 @@ class DataAssimilator(object):
     def add_reddit_comments(self):
         collector_dfs = self.add_collector(reddit.RedditComments)
         for df in collector_dfs:
-            df = df.apply(self.notch_filter, raw=True)
             df = df.apply(self.gaussian_filter, raw=True)
-            df = df.apply(self.normalize, raw=True)
+            df = df.apply(self.notch_filter, raw=True)
+            # df = df.apply(self.normalize, raw=True)
 
             df = self.add_collector_label(df, 'reddit')
 
@@ -39,20 +40,21 @@ class DataAssimilator(object):
     def add_fourchan_comments(self):
         collector_dfs = self.add_collector(fourchan.FourChanComments)
         for df in collector_dfs:
-            df = df.apply(self.notch_filter, raw=True)
             df = df.apply(self.gaussian_filter, raw=True)
-            df = df.apply(self.normalize, raw=True)
+            df = df.apply(self.notch_filter, raw=True)
+            # df = df.apply(self.normalize, raw=True)
 
             df = self.add_collector_label(df, '4chan')
 
             self.data_dfs.append(df)
 
     def add_binance_exchange(self):
-        collector_dfs = self.add_collector(binance.Binance)
+        collector_dfs = self.add_collector(binance.Binance,
+                                           keywords=['symbol'])
         for df in collector_dfs:
-            df = df.apply(self.notch_filter, raw=True, quality=0.5)
+            # df = df.apply(self.notch_filter, raw=True, quality=0.5)
             # df = df.apply(self.gaussian_filter, raw=True)
-            df = df.apply(self.normalize, raw=True)
+            # df = df.apply(self.normalize, raw=True)
 
             df = self.add_collector_label(df, 'binance')
 
@@ -70,9 +72,10 @@ class DataAssimilator(object):
                        column in columns}
         return dataframe.rename(columns=new_columns)
 
-    def add_collector(self, collector):
+    def add_collector(self, collector, keywords=['name', 'symbol']):
         collector_dfs = []
-        for keyword in self.keyword_list:
+        for keyword in keywords:
+            keyword = getattr(self.coin, keyword)
             data_collector = collector(keyword=keyword,
                                        start_date=self.start_date,
                                        end_date=self.end_date)
@@ -86,6 +89,7 @@ class DataAssimilator(object):
 
     def get_data(self):
         index_name = 'data_start'
+
         assimilated_df = functools.reduce(lambda left, right:
                                           pd.merge(left, right,
                                                    on=index_name, how='outer'),
@@ -99,7 +103,7 @@ class DataAssimilator(object):
         return y
 
     def normalize(self, data):
-        return data / np.max(data)
+        return data / np.max(data) * 100
 
     def gaussian_filter(self, data, sigma=1):
         return ndimage.gaussian_filter1d(data, sigma)

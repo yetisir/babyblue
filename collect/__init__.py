@@ -299,7 +299,10 @@ class DataCollector(ABC):
             data_df = self.sql_to_dataframe(self.start_date, self.end_date)
 
         processed_df = self.process_raw_data(data_df)
-        return processed_df[self.start_date:self.end_date]
+        if isinstance(processed_df.index, pd.DatetimeIndex):
+            return processed_df[self.start_date:self.end_date]
+        else:
+            return processed_df
 
     def merge_dataframe_into_table(self, dataframe, table_name, p_keys):
         temp_table_name = 'temp'
@@ -335,39 +338,39 @@ class DataCollector(ABC):
                 temp=temp_table_name))
 
     @abstractmethod
-    def define_cache_table(self):
+    def define_cache_table(self, Base):
         raise NotImplementedError
 
     @abstractmethod
-    def download_to_dataframe(self):
+    def download_to_dataframe(self, interval_start, interval_end):
         raise NotImplementedError
 
     @abstractmethod
-    def handle_download_error(self):
+    def handle_download_error(self, interval_start, interval_end, error):
         raise NotImplementedError
 
     @abstractmethod
-    def dataframe_to_sql(self):
+    def dataframe_to_sql(self, cache_df):
         raise NotImplementedError
 
     @abstractmethod
-    def sql_to_dataframe(self):
+    def sql_to_dataframe(self, interval_start, interval_end):
         raise NotImplementedError
 
     @abstractmethod
-    def interval_sql_query(self):
+    def interval_sql_query(self, interval_start, interval_end):
         raise NotImplementedError
 
     @abstractmethod
-    def post_cache_routine(self):
+    def post_cache_routine(self, interval_start, interval_end):
         raise NotImplementedError
 
     @abstractmethod
-    def pre_cache_routine(self):
+    def pre_cache_routine(self, interval_start, interval_end):
         raise NotImplementedError
 
     @abstractmethod
-    def process_raw_data(self):
+    def process_raw_data(self, data_df):
         raise NotImplementedError
 
     @abstractmethod
