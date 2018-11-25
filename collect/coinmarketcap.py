@@ -50,7 +50,7 @@ class CoinMarketCapMetaData(DataCollector):
 
         interval_df = pd.DataFrame(
             [[self.keyword,
-              data['name'],
+              data['slug'],
               data['category'],
               data['logo'],
               next(iter(data['urls']['website']), None),
@@ -97,7 +97,9 @@ class CoinMarketCapMetaData(DataCollector):
         pass
 
     def pre_cache_routine(self, interval_start, interval_end):
-        pass
+        query = self.interval_sql_query(interval_start, interval_end)
+        query.delete(synchronize_session=False)
+        self.session.commit()
 
     def process_raw_data(self, data_df):
         return data_df

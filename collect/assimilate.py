@@ -5,6 +5,9 @@ import pandas as pd
 import functools
 import json
 
+import plotly.graph_objs as go
+
+
 
 class Coin(object):
 
@@ -27,8 +30,6 @@ class Coin(object):
         self.announcement = data['announcement']
         self.reddit = data['reddit']
         self.twitter = data['twitter']
-
-        print(self.source_code)
 
 
 class DataAssimilator(object):
@@ -63,49 +64,68 @@ class DataAssimilator(object):
         for keyword in keywords:
 
             keyword = getattr(self.coin, keyword)
+
             data_collector = collector(keyword=keyword,
                                        start_date=self.start_date,
                                        end_date=self.end_date)
             data = data_collector.compile()
 
             for column in data.columns:
-                data_series = DataSeries(data.index.to_pydatetime(),
+                data_series = DataSeries(data.index,
                                          data[column].values, filters,
-                                         data_collector.name, keyword)
+                                         data_collector.collector_name,
+                                         keyword)
 
                 self.data_series.append(data_series)
 
-    def get_data(self):
-        index_name = 'data_start'
+    def get_dataframe(self):
+
+        data_dfs = [ds.get_dataframe() for ds in self.data_series]
+        index_name = data_dfs[0].index.name
 
         assimilated_df = functools.reduce(lambda left, right:
                                           pd.merge(left, right,
                                                    on=index_name, how='outer'),
-                                          self.data_dfs)
+                                          data_dfs)
 
         return assimilated_df
+
+    def get_plots(self):
+        return [ds.get_plot() for ds in self.data_series]
+
+    def get_data(self):
+        return self.data_series
 
 
 class DataSeries(object):
     def __init__(self, index, raw_data, filters, collector_name, keyword):
-        self.index = index
+        self.index = index.rename('timestamp')
         self.raw_data = raw_data
         self.filters = filters
         self.collector_name = collector_name
         self.keyword = keyword
         self.data = raw_data
 
+        self.name = '{keyword}_{collector}'.format(keyword=keyword,
+                                                   collector=collector_name)
+
         self.apply_filters()
 
     def apply_filters(self):
-        for filter in self.filters:
-            self.data = filter.process(self.data)
+        if self.filters:
+            for filter in self.filters:
+                self.data = filter.process(self.data)
 
     def get_plot(self):
-        pass
+        plot = go.Scatter(x=self.index, y=self.data,
+                          mode='lines',
+                          opacity=0.7,
+                          name=self.name)
+
+        return plot
 
     def get_data(self):
         return self.index, self.data
 
-    def get_pandas_series(self):
-        pd.Series(self.data, self.index)
+    def get_dataframe(self):
+        return pd.DataFrame(self.data, self.index, columns=[self.name])
