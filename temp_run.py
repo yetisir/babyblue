@@ -1,37 +1,9 @@
 from collect.assimilate import DataAssimilator
-from collect.coinmarketcap import CoinMarketCapMetaData
 import datetime
 import plotly.offline as py
 import plotly.graph_objs as go
 import cufflinks as cf
-import json
-
-
-class Coin(object):
-
-    def __init__(self, symbol):
-        self.symbol = symbol
-        with open('config.json') as config_file:
-            config = json.load(config_file)
-
-        data_df = CoinMarketCapMetaData(
-            symbol, config['coinmarketcap_api_key']).compile()
-        data = {col: data_df.iloc[0][i]
-                for i, col in enumerate(data_df.columns)}
-
-        self.name = data['name']
-        self.category = data['category']
-        self.logo = data['logo']
-        self.website = data['website']
-        self.source_code = data['source_code']
-        self.message_board = data['message_board']
-        self.announcement = data['announcement']
-        self.reddit = data['reddit']
-        self.twitter = data['twitter']
-
-        print(self.source_code)
-        print(self.announcement)
-
+from collect.filters import NotchFilter, GaussianFilter
 
 if __name__ == '__main__':
 
@@ -40,12 +12,15 @@ if __name__ == '__main__':
     start_date = datetime.datetime(year=2018, month=5, day=1, hour=0)
     end_date = datetime.datetime.utcnow()
 
-    assimilator = DataAssimilator(Coin('LINK'), start_date, end_date)
-    assimilator.add_google_trends()
-    assimilator.add_reddit_comments()
-    assimilator.add_fourchan_comments()
+    assimilator = DataAssimilator(start_date, end_date, 'LINK')
+    assimilator.add_google_trends(filters=[NotchFilter()])
+    assimilator.add_reddit_comments(filters=[GaussianFilter(),
+                                             NotchFilter()])
+    assimilator.add_fourchan_comments(filters=[GaussianFilter(),
+                                               NotchFilter()])
     assimilator.add_binance_exchange()
-    data = assimilator.get_data()
+    data = assimilator.get_dataframe()
+    plots = assimilator.get_plots()
 
     layout = go.Layout(showlegend=True)
 
