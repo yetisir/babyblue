@@ -4,7 +4,7 @@ import plotly.offline as py
 import plotly.graph_objs as go
 import cufflinks as cf
 from collect.filters import NotchFilter, GaussianFilter
-from plot import dashboard
+# from plot import dashboard
 
 
 if __name__ == '__main__':
@@ -29,12 +29,12 @@ if __name__ == '__main__':
 
     binance_labels = [c for c in data.columns if 'binance' in c]
 
-    # file = py.plot(data.iplot(asFigure=True, secondary_y=binance_labels),
-    #                filename='plot.html', auto_open=False)
+    file = py.plot(data.iplot(asFigure=True, secondary_y=binance_labels),
+                   filename='plot.html', auto_open=False)
     # print(file)
 
-    app = dashboard.spawn(plots)
-    app.run_server(debug=True)
+    # app = dashboard.spawn(plots)
+    # app.run_server(debug=True)
 
 
 # future_data_sources:
