@@ -15,16 +15,12 @@ if __name__ == '__main__':
     end_date = datetime.datetime.utcnow()
 
     assimilator = DataAssimilator(start_date, end_date, 'XRP')
-    print('*********5')
     assimilator.add_google_trends(filters=[GaussianFilter(),
                                            NotchFilter()])
-    print('*********4')
     assimilator.add_reddit_comments(filters=[GaussianFilter(),
                                              NotchFilter()])
-    print('*********3')
     assimilator.add_fourchan_comments(filters=[GaussianFilter(),
                                                NotchFilter()])
-    print('*********2')
     assimilator.add_binance_exchange()
     data = assimilator.get_dataframe()
     plots = assimilator.get_plots()
@@ -37,9 +33,8 @@ if __name__ == '__main__':
     #                filename='plot.html', auto_open=False)
     # print(file)
 
-    print('*********1')
     app = dashboard.spawn(plots)
-    # app.run_server(debug=True)
+    app.run_server(debug=True)
 
 
 # future_data_sources:

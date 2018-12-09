@@ -14,14 +14,44 @@ def spawn(plots):
             figure={
                 'data': plots,
                 'layout': go.Layout(
-                    xaxis={'type': 'log', 'title': 'GDP Per Capita'},
-                    yaxis={'title': 'Life Expectancy'},
-                    margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
+                    xaxis={'title': 'DateTime'},
                     legend={'x': 0, 'y': 1},
                     hovermode='closest'
                 )
             }
         )
     ])
+
+import dash
+from dash.dependencies import Input, Output
+import dash_core_components as dcc
+import dash_html_components as html
+import itertools
+
+app = dash.Dash()
+app.layout = html.Div([
+    dcc.Dropdown(
+        id='datasource-1',
+        options=[
+            {'label': i, 'value': i} for i in ['A', 'B', 'C']
+        ],
+    ),
+    dcc.Dropdown(
+        id='datasource-2',
+        options=[
+            {'label': i, 'value': i} for i in ['X', 'Y', 'Z']
+        ]
+    ),
+    html.Hr(),
+    html.Div('Dynamic Controls'),
+    html.Div(
+        id='controls-container'
+    ),
+    html.Hr(),
+    html.Div('Output'),
+    html.Div(
+        id='output-container'
+    )
+])
 
     return app
