@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from scipy import signal, ndimage
 import numpy as np
+import pandas as pd
 
 
 class BaseFilter(ABC):
@@ -40,3 +41,14 @@ class GaussianFilter(BaseFilter):
 
     def process(self, data):
         return ndimage.gaussian_filter1d(data, self.sigma)
+
+
+class DailyAverage(BaseFilter):
+    def __init__(self, hours=24):
+        super().__init__()
+        self.hours = hours
+
+    def process(self, data):
+        series = pd.Series(data)
+        series = series.rolling(self.hours).mean()
+        return series.values

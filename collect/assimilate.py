@@ -8,7 +8,6 @@ import json
 import plotly.graph_objs as go
 
 
-
 class Coin(object):
 
     def __init__(self, symbol):
@@ -43,24 +42,30 @@ class DataAssimilator(object):
         self.data_series = []
 
     def add_google_trends(self, filters=None):
-        self.add_collector(google.GoogleTrends,
-                           filters=filters)
+        columns = self.add_collector(google.GoogleTrends,
+                                     filters=filters)
+        return columns
 
     def add_reddit_comments(self, filters=None):
-        self.add_collector(reddit.RedditComments,
-                           filters=filters)
+        columns = self.add_collector(reddit.RedditComments,
+                                     filters=filters)
+        return columns
 
     def add_fourchan_comments(self, filters=None):
-        self.add_collector(fourchan.FourChanComments,
-                           filters=filters)
+        columns = self.add_collector(fourchan.FourChanComments,
+                                     filters=filters)
+        return columns
 
     def add_binance_exchange(self, filters=None):
-        self.add_collector(binance.Binance,
-                           keywords=['symbol'],
-                           filters=filters)
+        columns = self.add_collector(binance.Binance,
+                                     keywords=['symbol'],
+                                     filters=filters)
+        return columns
 
     def add_collector(self, collector, keywords=['name', 'symbol'],
                       filters=None):
+        column_names = []
+        
         for keyword in keywords:
 
             keyword = getattr(self.coin, keyword)
@@ -70,13 +75,18 @@ class DataAssimilator(object):
                                        end_date=self.end_date)
             data = data_collector.compile()
 
+
             for column in data.columns:
                 data_series = DataSeries(data.index,
                                          data[column].values, filters,
                                          data_collector.collector_name,
                                          keyword)
 
+                column_names.append(data_series.name)
+
                 self.data_series.append(data_series)
+
+        return column_names
 
     def get_dataframe(self):
 
