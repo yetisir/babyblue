@@ -45,8 +45,7 @@ class BitCoinTalkSpider(Spider):
                     'board': item['id'],
                 }
             )
-        print(response.meta.get('board'), self.boards_to_crawl)
-        print(response.meta.get('board') in self.boards_to_crawl)
+
         if response.meta.get('board') in self.boards_to_crawl:
             for thread in threads:
 
@@ -67,7 +66,11 @@ class BitCoinTalkSpider(Spider):
                 yield self.parse_comment(response, comment)
 
             if next_page:
-                yield response.follow(next_page, callback=self.parse)
+                yield response.follow(
+                    next_page,
+                    callback=self.parse,
+                    meta=response.meta
+                )
 
     def parse_board(self, response, board):
 
