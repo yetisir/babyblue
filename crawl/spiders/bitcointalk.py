@@ -107,14 +107,12 @@ class BitcoinTalkSpider(Spider):
                 max_db_comment_id = 0
 
             response_comment_ids = [0]
-            print(comments)
             for comment in comments:
                 item = self.parse_comment(response, comment)
                 response_comment_ids.append(int(item['id']))
                 yield item
 
             if next_page:
-                print(response_comment_ids, max_db_comment_id)
                 if (updated_threads or
                         min(response_comment_ids) > int(max_db_comment_id)):
 
@@ -202,16 +200,6 @@ class BitcoinTalkSpider(Spider):
 
         item['thread'] = response.meta.get('thread')
 
-        print(response.meta.get('thread'))
-        print(comment.xpath(
-            'descendant::table/descendant::div[@class="smalltext"]'
-        ))
-        print(comment.xpath(
-            'descendant::table/descendant::div[@class="smalltext"]'
-        ).xpath('normalize-space()'))
-        print(comment.xpath(
-            'descendant::table/descendant::div[@class="smalltext"]'
-        ).xpath('normalize-space()').extract_first())
         return self.verify_date(item, 'timestamp')
 
     def verify_date(self, item, time_item):
@@ -233,7 +221,6 @@ class BitcoinTalkSpider(Spider):
             password=settings.get('MONGO_PASSWORD'),
             authSource=settings.get('MONGO_DATABASE'),
         )
-        print(self.client)
 
         self.db = self.client[settings.get('MONGO_DATABASE')]
 
