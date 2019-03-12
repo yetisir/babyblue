@@ -22,7 +22,10 @@ class BitcoinTalkSpider(Spider):
         self.open_mongodb()
 
     def __del__(self):
-        self.close_mongodb()
+        try:
+            self.close_mongodb()
+        except AttributeError:
+            pass
 
     def parse(self, response):
         boards = Selector(response).xpath(
