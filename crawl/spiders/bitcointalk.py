@@ -3,9 +3,11 @@ from scrapy.selector import Selector
 from crawl.items import Board, Thread, Comment
 from datetime import datetime
 import dateparser
+from scrapy.conf import settings
+import pymongo
 
 
-class BitCoinTalkSpider(Spider):
+class BitcoinTalkSpider(Spider):
     name = "bitcointalk"
     allowed_domains = ["bitcointalk.org"]
     start_urls = [
@@ -13,8 +15,14 @@ class BitCoinTalkSpider(Spider):
     ]
 
     boards_to_crawl = [
-        'b67',
+        'b1',
     ]
+
+    def __init__(self):
+        self.open_mongodb()
+
+    def __del__(self):
+        self.close_mongodb()
 
     def parse(self, response):
         boards = Selector(response).xpath(
@@ -36,41 +44,85 @@ class BitCoinTalkSpider(Spider):
         for board in boards:
 
             item = self.parse_board(response, board)
+
+            cached_board = self.db.boards.find_one({'id': item['id']})
+
             yield item
 
-            yield response.follow(
-                item['url'],
-                callback=self.parse,
-                meta={
-                    'board': item['id'],
-                }
-            )
+            scrape_board = False
+            if not cached_board:
+                scrape_board = True
+            elif cached_board['last_scraped'] < item['last_post']:
+                scrape_board = True
+
+            if scrape_board:
+                yield response.follow(
+                    item['url'],
+                    callback=self.parse,
+                    meta={
+                        'board': item['id'],
+                    }
+                )
 
         if response.meta.get('board') in self.boards_to_crawl:
+            updated_threads = False
             for thread in threads:
 
                     item = self.parse_thread(response, thread)
 
-                    yield item
-
-                    yield response.follow(
-                        item['url'],
-                        callback=self.parse,
-                        meta={
-                            'thread': item['id'],
-                            'board': response.meta.get('board'),
-                        }
+                    cached_thread = self.db.threads.find_one(
+                        {'id': item['id']}
                     )
 
+                    yield item
+
+                    scrape_thread = False
+                    if not cached_thread:
+                        scrape_thread = True
+                    elif cached_thread['last_scraped'] < item['last_post']:
+                        scrape_thread = True
+
+                    if scrape_thread:
+
+                        updated_threads = True
+
+                        yield response.follow(
+                            item['url'],
+                            callback=self.parse,
+                            meta={
+                                'thread': item['id'],
+                                'board': response.meta.get('board'),
+                            }
+                        )
+
+            comment_thread = response.meta.get('thread')
+            max_db_comment_id_document = self.db.comments.find_one(
+                filter={'thread': comment_thread},
+                sort=[('id', pymongo.DESCENDING)]
+            )
+
+            if max_db_comment_id_document is not None:
+                max_db_comment_id = max_db_comment_id_document['id']
+            else:
+                max_db_comment_id = 0
+
+            response_comment_ids = [0]
+            print(comments)
             for comment in comments:
-                yield self.parse_comment(response, comment)
+                item = self.parse_comment(response, comment)
+                response_comment_ids.append(int(item['id']))
+                yield item
 
             if next_page:
-                yield response.follow(
-                    next_page,
-                    callback=self.parse,
-                    meta=response.meta
-                )
+                print(response_comment_ids, max_db_comment_id)
+                if (updated_threads or
+                        min(response_comment_ids) > int(max_db_comment_id)):
+
+                    yield response.follow(
+                        next_page,
+                        callback=self.parse,
+                        meta=response.meta
+                    )
 
     def parse_board(self, response, board):
 
@@ -95,7 +147,8 @@ class BitCoinTalkSpider(Spider):
 
         item['last_post'] = dateparser.parse(board.xpath(
             'descendant::b[contains(text(), "Last post")]/..'
-        ).xpath('normalize-space()').extract_first().split('on ')[-1])
+        ).xpath('normalize-space()').extract_first().split('on ')[-1],
+                                             settings={'TIMEZONE': 'UTC'})
 
         return self.verify_date(item, 'last_post')
 
@@ -109,9 +162,7 @@ class BitCoinTalkSpider(Spider):
             'descendant::span[starts-with(@id, "msg")]/a/@href'
         ).extract_first()
 
-        item['id'] = thread.xpath(
-            'descendant::span[starts-with(@id, "msg")]/@id'
-        ).extract_first().split('_')[-1]
+        item['id'] = item['url'].split('topic=')[1].split('.')[0]
 
         item['author'] = thread.xpath(
             'descendant::a[starts-with(@title, "View")]/text()'
@@ -123,7 +174,8 @@ class BitCoinTalkSpider(Spider):
 
         item['last_post'] = dateparser.parse(thread.xpath(
             'descendant::span[@class="smalltext"]'
-        ).xpath('normalize-space()').extract_first().split(' by')[0])
+        ).xpath('normalize-space()').extract_first().split(' by')[0],
+                                             settings={'TIMEZONE': 'UTC'})
 
         return self.verify_date(item, 'last_post')
 
@@ -139,7 +191,8 @@ class BitCoinTalkSpider(Spider):
 
         item['timestamp'] = dateparser.parse(comment.xpath(
             'descendant::table/descendant::div[@class="smalltext"]'
-        ).xpath('normalize-space()').extract_first())
+        ).xpath('normalize-space()').extract_first().split('Last')[0],
+                                             settings={'TIMEZONE': 'UTC'})
 
         item['id'] = comment.xpath(
             'descendant::div[starts-with(@id, "subject")]/@id'
@@ -149,14 +202,40 @@ class BitCoinTalkSpider(Spider):
 
         item['thread'] = response.meta.get('thread')
 
+        print(response.meta.get('thread'))
+        print(comment.xpath(
+            'descendant::table/descendant::div[@class="smalltext"]'
+        ))
+        print(comment.xpath(
+            'descendant::table/descendant::div[@class="smalltext"]'
+        ).xpath('normalize-space()'))
+        print(comment.xpath(
+            'descendant::table/descendant::div[@class="smalltext"]'
+        ).xpath('normalize-space()').extract_first())
         return self.verify_date(item, 'timestamp')
 
     def verify_date(self, item, time_item):
         # Handle race condition - post may have been retrieved before
         # midnight but processed here shortly after midnight resulting in
-        # the translation of 'Today' to be off by one day
-        print(item, time_item)
+        # the translation of 'Today' to datetime being off by one day
+
         if item[time_item] > datetime.utcnow():
             item[time_item] = item[time_item].shift(days=-1)
 
         return item
+
+    def open_mongodb(self):
+
+        self.client = pymongo.MongoClient(
+            host=settings.get('MONGO_HOST'),
+            port=settings.get('MONGO_PORT'),
+            username=settings.get('MONGO_USERNAME'),
+            password=settings.get('MONGO_PASSWORD'),
+            authSource=settings.get('MONGO_DATABASE'),
+        )
+        print(self.client)
+
+        self.db = self.client[settings.get('MONGO_DATABASE')]
+
+    def close_mongodb(self):
+        self.client.close()

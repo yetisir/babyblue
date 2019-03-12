@@ -8,9 +8,10 @@ import pymongo
 #
 # from scrapy.conf import settings
 # from scrapy.exceptions import DropItem
-from scrapy import log
-
+import logging
 from crawl.items import Board, Thread, Comment
+
+log = logging.getLogger('scrapy.proxies')
 
 
 class MongoPipeline(object):
