@@ -1,5 +1,6 @@
 from scrapy import Spider
 from scrapy.selector import Selector
+from scrapy.http import Request
 from crawl.items import Board, Thread, Comment
 from datetime import datetime
 import dateparser
@@ -28,6 +29,14 @@ class BitcoinTalkSpider(Spider):
             pass
 
     def parse(self, response):
+
+        site_identifier = Selector(response).xpath(
+            '//td[@class="catbg"]/span/text()'
+        ).extract_first()
+
+        if site_identifier != 'Bitcoin Forum':
+            yield Request(url=response.url, dont_filter=True)
+
         boards = Selector(response).xpath(
             '//tr/td/b/a[starts-with(@name, "b")]/../../..'
         )
