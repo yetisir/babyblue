@@ -12,14 +12,12 @@ class BitcoinTalkSpider(Spider):
     name = "bitcointalk"
     allowed_domains = ["bitcointalk.org"]
     start_urls = [
-        'https://bitcointalk.org/',
+        'http://bitcointalk.org/',
     ]
 
     boards_to_crawl = [
         'b1',
     ]
-
-    database_name = 'test'
 
     def __init__(self):
         self.open_mongodb()
@@ -224,16 +222,15 @@ class BitcoinTalkSpider(Spider):
         return item
 
     def open_mongodb(self):
-
         self.client = pymongo.MongoClient(
             host=settings.get('MONGO_HOST'),
             port=settings.get('MONGO_PORT'),
             username=settings.get('MONGO_USERNAME'),
             password=settings.get('MONGO_PASSWORD'),
-            authSource=settings.get('MONGO_DATABASE'),
+            authSource=settings.get('MONGO_AUTHORIZATION_DATABASE'),
         )
 
-        self.db = self.client[settings.get('MONGO_DATABASE')]
+        self.db = self.client[self.name]
 
     def close_mongodb(self):
         try:

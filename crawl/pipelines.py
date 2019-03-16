@@ -21,42 +21,24 @@ class MongoPipeline(object):
         Comment: 'comments',
     }
 
-    def __init__(self, host, port, username, password, database):
-        self.host = host
-        self.port = port
-        self.username = username
-        self.password = password
-        self.database = database
+    def __init__(self):
+        pass
 
     @classmethod
     def from_crawler(cls, crawler):
-        return cls(
-            host=crawler.settings.get('MONGO_HOST'),
-            port=crawler.settings.get('MONGO_PORT'),
-            username=crawler.settings.get('MONGO_USERNAME'),
-            password=crawler.settings.get('MONGO_PASSWORD'),
-            database=crawler.settings.get('MONGO_DATABASE')
-        )
+        return cls()
 
     def open_spider(self, spider):
-        self.client = pymongo.MongoClient(
-            host=self.host,
-            port=self.port,
-            username=self.username,
-            password=self.password,
-            authSource=self.database,
-        )
-
-        self.db = self.client[self.database]
+        pass
 
     def close_spider(self, spider):
-        self.client.close()
+        pass
 
     def process_item(self, item, spider):
         doc = dict(item)
         spec = {'id': doc['id']}
         collection = self.collections.get(type(item))
-        self.db[collection].update(spec, doc, True)
+        spider.db[collection].update(spec, doc, True)
         return item
 
         # valid = True

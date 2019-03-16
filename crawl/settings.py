@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import requests
+from . import passwords
 
 # Scrapy settings for scrapy_tutorial project
 #
@@ -20,7 +21,7 @@ NEWSPIDER_MODULE = 'crawl.spiders'
 #USER_AGENT = 'scrapy_tutorial (+http://www.yourdomain.com)'
 
 # Obey robots.txt rules
-ROBOTSTXT_OBEY = True
+# ROBOTSTXT_OBEY = True
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 #CONCURRENT_REQUESTS = 32
@@ -28,7 +29,7 @@ ROBOTSTXT_OBEY = True
 # Configure a delay for requests for the same website (default: 0)
 # See https://doc.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-DOWNLOAD_DELAY = 3
+DOWNLOAD_DELAY = 1
 # The download delay setting will honor only one of:
 #CONCURRENT_REQUESTS_PER_DOMAIN = 16
 CONCURRENT_REQUESTS_PER_IP = 16
@@ -53,10 +54,10 @@ CONCURRENT_REQUESTS_PER_IP = 16
 
 # Enable or disable downloader middlewares
 # See https://doc.scrapy.org/en/latest/topics/downloader-middleware.html
-DOWNLOADER_MIDDLEWARES = {
-    'rotating_proxies.middlewares.RotatingProxyMiddleware': 610,
-    'rotating_proxies.middlewares.BanDetectionMiddleware': 620,
-}
+# DOWNLOADER_MIDDLEWARES = {
+#     'rotating_proxies.middlewares.RotatingProxyMiddleware': 610,
+#     'rotating_proxies.middlewares.BanDetectionMiddleware': 620,
+# }
 
 
 
@@ -81,9 +82,9 @@ ITEM_PIPELINES = {
 
 MONGO_HOST = 'eggs.grumpyyeti.com'
 MONGO_PORT = 27017
-MONGO_DATABASE = 'test'
-MONGO_USERNAME = 'yeti'
-MONGO_PASSWORD = 'eggs'
+MONGO_AUTHORIZATION_DATABASE = 'admin'
+MONGO_USERNAME = passwords.mongodb['username']
+MONGO_PASSWORD = passwords.mongodb['password']
 
 
 # Enable and configure the AutoThrottle extension (disabled by default)
