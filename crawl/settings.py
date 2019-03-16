@@ -54,35 +54,18 @@ CONCURRENT_REQUESTS_PER_IP = 16
 # Enable or disable downloader middlewares
 # See https://doc.scrapy.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
-    'scrapy.downloadermiddlewares.retry.RetryMiddleware': 90,
-    'scrapy_proxies.RandomProxy': 100,
-    'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware': 110,
+    'rotating_proxies.middlewares.RotatingProxyMiddleware': 610,
+    'rotating_proxies.middlewares.BanDetectionMiddleware': 620,
 }
 
-# Retry many times since proxies often fail
-RETRY_TIMES = 10
-# Retry on most error codes since proxies fail for different reasons
-RETRY_HTTP_CODES = [500, 503, 504, 400, 403, 404, 408]
 
-# Proxy list containing entries like
-# http://host1:port
-# http://username:password@host2:port
-# http://host3:port
-# ...
-PROXY_LIST = 'proxies.txt'
 
 proxy_list_url = 'https://www.proxy-list.download/api/v1/get?type=http&anon=transparent'
-proxy_list = requests.get(proxy_list_url).content.decode('UTF-8').split()
-proxy_list = ['http://{}\n'.format(proxy) for proxy in proxy_list]
-with open(PROXY_LIST, 'w') as f:
-    f.writelines(proxy_list)
+# proxy_list_url = 'http://pubproxy.com/api/proxy?format=txt&type=http&limit=20&last_check=1'
+ROTATING_PROXY_LIST = requests.get(proxy_list_url).content.decode('UTF-8').split()
 
 
-# Proxy mode
-# 0 = Every requests have different proxy
-# 1 = Take only one proxy from the list and assign it to every requests
-# 2 = Put a custom proxy to use in the settings
-PROXY_MODE = 0
+
 
 # Enable or disable extensions
 # See https://doc.scrapy.org/en/latest/topics/extensions.html

@@ -19,14 +19,13 @@ class BitcoinTalkSpider(Spider):
         'b1',
     ]
 
+    database_name = 'test'
+
     def __init__(self):
         self.open_mongodb()
 
     def __del__(self):
-        try:
-            self.close_mongodb()
-        except AttributeError:
-            pass
+        self.close_mongodb()
 
     def parse(self, response):
 
@@ -237,4 +236,7 @@ class BitcoinTalkSpider(Spider):
         self.db = self.client[settings.get('MONGO_DATABASE')]
 
     def close_mongodb(self):
-        self.client.close()
+        try:
+            self.client.close()
+        except AttributeError:
+            pass
