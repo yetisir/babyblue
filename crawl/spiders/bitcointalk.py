@@ -27,12 +27,12 @@ class BitcoinTalkSpider(Spider):
 
     def parse(self, response):
 
-        site_identifier = Selector(response).xpath(
-            '//td[@class="catbg"]/span/text()'
-        ).extract_first()
-
-        if site_identifier != 'Bitcoin Forum':
-            yield Request(url=response.url, dont_filter=True)
+        # site_identifier = Selector(response).xpath(
+        #     '//td[@class="catbg"]/span/text()'
+        # ).extract_first()
+        #
+        # if site_identifier != 'Bitcoin Forum':
+        #     yield Request(url=response.url, dont_filter=True)
 
         boards = Selector(response).xpath(
             '//tr/td/b/a[starts-with(@name, "b")]/../../..'

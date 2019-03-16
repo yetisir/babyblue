@@ -38,15 +38,13 @@ class MongoPipeline(object):
         doc = dict(item)
         spec = {'id': doc['id']}
         collection = self.collections.get(type(item))
-        spider.db[collection].update(spec, doc, True)
-        return item
 
-        # valid = True
-        # for data in item:
-        #     if not data:
-        #         valid = False
-        #         raise DropItem('Missing {0}'.format(data))
-        # if valid:
-        #     self.collection.insert(dict(item))
-        #     log.msg('Question added to MongoDB database!')
-        # return item
+        if collection == "comments":
+            db_item = collection.find_one(spec)
+            if not db_item:
+                collection.insert_one(doc)
+                return item
+
+        else:
+            spider.db[collection].update(spec, doc, True)
+            return item
