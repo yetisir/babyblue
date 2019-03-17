@@ -15,7 +15,7 @@ class BitcoinTalkSpider(Spider):
     ]
 
     boards_to_crawl = [
-        'b138',
+        'b67',
     ]
 
     def __init__(self):

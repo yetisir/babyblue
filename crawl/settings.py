@@ -80,7 +80,7 @@ ITEM_PIPELINES = {
    'crawl.pipelines.MongoPipeline': 300,
 }
 
-MONGO_HOST = 'eggs.grumpyyeti.com'
+MONGO_HOST = 'localhost'
 MONGO_PORT = 27017
 MONGO_AUTHORIZATION_DATABASE = 'admin'
 MONGO_USERNAME = passwords.mongodb['username']
@@ -96,7 +96,7 @@ AUTOTHROTTLE_START_DELAY = 1
 AUTOTHROTTLE_MAX_DELAY = 3
 # The average number of requests Scrapy should be sending in parallel to
 # each remote server
-AUTOTHROTTLE_TARGET_CONCURRENCY = 5
+AUTOTHROTTLE_TARGET_CONCURRENCY = 1
 # Enable showing throttling stats for every response received:
 AUTOTHROTTLE_DEBUG = True
 
