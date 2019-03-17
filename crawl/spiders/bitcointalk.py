@@ -42,68 +42,35 @@ class BitcoinTalkSpider(Spider):
             '//span[@class="prevnext"]/child::*'
         )
 
+        # handle boards
         for board in boards:
-
             item = self.parse_board(response, board)
-
-            db_board = self.db.boards.find_one({'id': item['id']})
-
-            scrape_board = False
-            if not db_board:
-                scrape_board = True
-            elif db_board['last_scraped'] < item['last_post']:
-                scrape_board = True
-
-            if scrape_board:
+            if self.valid_item(item, self.db.boards):
                 yield item
                 yield response.follow(
                     item['url'],
                     callback=self.parse,
-                    meta={
-                        'board': item['id'],
-                    }
+                    meta={'board': item['id']}
                 )
 
         updated_threads = False
         if response.meta.get('board') in self.boards_to_crawl:
+            # handle threads
             for thread in threads:
-
-                    item = self.parse_thread(response, thread)
-
-                    db_thread = self.db.threads.find_one(
-                        {'id': item['id']}
+                item = self.parse_thread(response, thread)
+                if self.valid_item(item, self.db.threads):
+                    updated_threads = True
+                    yield item
+                    yield response.follow(
+                        item['url'],
+                        callback=self.parse,
+                        meta={
+                            'thread': item['id'],
+                            'board': response.meta.get('board'),
+                        }
                     )
 
-                    scrape_thread = False
-                    if not db_thread:
-                        scrape_thread = True
-                    elif db_thread['last_scraped'] < item['last_post']:
-                        scrape_thread = True
-
-                    if scrape_thread:
-                        yield item
-                        updated_threads = True
-
-                        yield response.follow(
-                            item['url'],
-                            callback=self.parse,
-                            meta={
-                                'thread': item['id'],
-                                'board': response.meta.get('board'),
-                            }
-                        )
-
-            comment_thread = response.meta.get('thread')
-            most_recent_db_comment = self.db.comments.find_one(
-                filter={'thread': comment_thread},
-                sort=[('timestamp', pymongo.DESCENDING)]
-            )
-
-            if most_recent_db_comment is not None:
-                latest_db_timestamp = most_recent_db_comment['timestamp']
-            else:
-                latest_db_timestamp = datetime.utcfromtimestamp(0)
-
+            # handle comments
             oldest_comment_timestamp = datetime.utcfromtimestamp(0)
             for comment in comments:
                 item = self.parse_comment(response, comment)
@@ -111,21 +78,15 @@ class BitcoinTalkSpider(Spider):
                 oldest_comment_timestamp = min(
                     oldest_comment_timestamp, item['timestamp'])
 
-                db_comment = self.db.comments.find_one(
-                    {'id': comment_id}
-                )
+                db_comment = self.db.comments.find_one({'id': comment_id})
 
                 if not db_comment:
                     yield item
 
-            prevnext_links = next_page.xpath('child::text()')
-            next_page_link = None
-            for i, prevnext_text in enumerate(prevnext_links.extract()):
-
-                if ord(prevnext_text) == 187:
-                    next_page_link = next_page[i].xpath(
-                        '@href'
-                    ).extract_first()
+            # handle next page
+            latest_db_timestamp = self.latest_saved_comment_timestamp(
+                response.meta.get('thread'))
+            next_page_link = self.get_next_page_link(next_page)
 
             if next_page_link:
                 if (updated_threads or
@@ -136,6 +97,42 @@ class BitcoinTalkSpider(Spider):
                         callback=self.parse,
                         meta=response.meta
                     )
+
+    def get_next_page_link(self, next_page):
+        prevnext_links = next_page.xpath('child::text()')
+        next_page_link = None
+        for i, prevnext_text in enumerate(prevnext_links.extract()):
+
+            if ord(prevnext_text) == 187:
+                next_page_link = next_page[i].xpath(
+                    '@href'
+                ).extract_first()
+
+        return next_page_link
+
+    def latest_saved_comment_timestamp(self, comment_thread):
+            most_recent_db_comment = self.db.comments.find_one(
+                filter={'thread': comment_thread},
+                sort=[('timestamp', pymongo.DESCENDING)]
+            )
+
+            if most_recent_db_comment is not None:
+                latest_db_timestamp = most_recent_db_comment['timestamp']
+            else:
+                latest_db_timestamp = datetime.utcfromtimestamp(0)
+
+            return latest_db_timestamp
+
+    def valid_item(self, item, collection):
+        db_thread = collection.find_one({'id': item['id']})
+
+        valid = False
+        if not db_thread:
+            valid = True
+        elif db_thread['last_scraped'] < item['last_post']:
+            valid = True
+
+        return valid
 
     def parse_board(self, response, board):
 
