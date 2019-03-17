@@ -80,7 +80,7 @@ ITEM_PIPELINES = {
    'crawl.pipelines.MongoPipeline': 300,
 }
 
-MONGO_HOST = 'localhost'
+MONGO_HOST = 'eggs.grumpyyeti.com'
 MONGO_PORT = 27017
 MONGO_AUTHORIZATION_DATABASE = 'admin'
 MONGO_USERNAME = passwords.mongodb['username']

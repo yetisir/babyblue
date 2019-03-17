@@ -7,11 +7,11 @@ import dateparser
 from scrapy.conf import settings
 import pymongo
 import json
-
+import os
 
 class FourChanSpider(Spider):
     name = "fourchan"
-    allowed_domains = ["http://a.4cdn.org"]
+    allowed_domains = ["a.4cdn.org"]
     start_urls = [
         'http://a.4cdn.org/boards.json',
     ]
@@ -26,211 +26,156 @@ class FourChanSpider(Spider):
     def __del__(self):
         self.close_mongodb()
 
+    def normalize_response(self, response):
+
+        response_data = json.loads(response.text)
+        if type(response_data) == list:
+            threads = []
+            for page in response_data:
+                threads += page['threads']
+
+            return {'threads': threads}
+
+        return response_data
+
     def parse(self, response):
+        response_data = self.normalize_response(response)
 
-        site_identifier = Selector(response).xpath(
-            '//td[@class="catbg"]/span/text()'
-        ).extract_first()
-
-        if site_identifier != 'Bitcoin Forum':
-            yield Request(url=response.url, dont_filter=True)
-
-        boards = json.loads(response.text)
-
-        threads = Selector(response).xpath(
-            '//span[starts-with(@id, "msg")]/../..'
-        )
-
-        comments = Selector(response).xpath(
-            '//div[starts-with(@id, "subject")]/../../../../../..'
-        )
-
-        next_page = Selector(response).xpath(
-            '//span[@class="prevnext"]/*[text()[.="»"]]/@href'
-        ).extract_first()
-
+        boards = self.check_list(response_data.get('boards'))
         for board in boards:
-
             item = self.parse_board(response, board)
-
-            cached_board = self.db.boards.find_one({'id': item['id']})
-
             yield item
 
-            scrape_board = False
-            if not cached_board:
-                scrape_board = True
-            elif cached_board['last_scraped'] < item['last_post']:
-                scrape_board = True
+            if item['id'] in self.boards_to_crawl:
 
-            if scrape_board:
+                yield response.follow(
+                    item['url'],
+                    callback=self.parse,
+                    meta={'board': item['id']}
+                )
+
+        if response.meta.get('board') in self.boards_to_crawl:
+
+            threads = self.check_list(response_data.get('threads'))
+            print('*********************************************')
+            print(len(threads))
+            for thread in threads:
+                item = self.parse_thread(response, thread)
+                yield item
                 yield response.follow(
                     item['url'],
                     callback=self.parse,
                     meta={
-                        'board': item['id'],
+                        'thread': item['id'],
+                        'board': response.meta.get('board'),
                     }
                 )
-
-        if response.meta.get('board') in self.boards_to_crawl:
-            updated_threads = False
-            for thread in threads:
-
-                    item = self.parse_thread(response, thread)
-
-                    cached_thread = self.db.threads.find_one(
-                        {'id': item['id']}
-                    )
-
-                    yield item
-
-                    scrape_thread = False
-                    if not cached_thread:
-                        scrape_thread = True
-                    elif cached_thread['last_scraped'] < item['last_post']:
-                        scrape_thread = True
-
-                    if scrape_thread:
-
-                        updated_threads = True
-
-                        yield response.follow(
-                            item['url'],
-                            callback=self.parse,
-                            meta={
-                                'thread': item['id'],
-                                'board': response.meta.get('board'),
-                            }
-                        )
-
-            comment_thread = response.meta.get('thread')
-            max_db_comment_id_document = self.db.comments.find_one(
-                filter={'thread': comment_thread},
-                sort=[('id', pymongo.DESCENDING)]
-            )
-
-            if max_db_comment_id_document is not None:
-                max_db_comment_id = max_db_comment_id_document['id']
-            else:
-                max_db_comment_id = 0
-
-            response_comment_ids = [0]
+            comments = self.check_list(response_data.get('posts'))
             for comment in comments:
                 item = self.parse_comment(response, comment)
-                response_comment_ids.append(int(item['id']))
                 yield item
 
-            if next_page:
-                if (updated_threads or
-                        min(response_comment_ids) > int(max_db_comment_id)):
+    def check_list(self, list):
+        if list is None:
+            return []
+        else:
+            return list
 
-                    yield response.follow(
-                        next_page,
-                        callback=self.parse,
-                        meta=response.meta
-                    )
+    # def get_boards(self, response):
+    #     if 'boards' in response.url:
+    #         boards = json.loads(response.text)['boards']
+    #     else:
+    #         boards = None
+    #     return boards
+    #
+    # def get_threads(self, response):
+    #     if 'catalog' in response.url:
+    #         threads = json.loads(response.text)['threads']
+    #     else:
+    #         threads = None
+    #     return threads
+    #
+    # def get_comments(self, response):
+    #     file_name = os.path.splitext(os.path.basename(response.url))[0]
+    #     try:
+    #         thread = int(file_name)
+    #     except ValueError:
+    #         thread = None
+    #
+    #     if thread:
+    #         comments = json.loads(response.text)['posts']
+    #     else:
+    #         comments = None
+    #     return comments
 
     def parse_board(self, response, board):
 
         item = Board()
-        item['name'] = board.xpath(
-            'descendant::a[starts-with(@name, "b")]/text()'
-        ).extract_first()
+        item['name'] = board['title']
 
-        item['id'] = board.xpath(
-            'descendant::a[starts-with(@name, "b")]/@name'
-        ).extract_first()
+        item['id'] = board['board']
 
-        item['url'] = board.xpath(
-            'descendant::a[starts-with(@name, "b")]/@href'
-        ).extract_first()
+        item['url'] = ('http://a.4cdn.org/{board_id}/catalog.json').format(
+                           board_id=item['id'])
 
-        item['description'] = ''.join(board.xpath(
-            'descendant::td/text()'
-        ).extract()).strip()
+        item['description'] = Selector(text=board['meta_description']).xpath(
+            'normalize-space()').extract_first()
 
         item['last_scraped'] = datetime.utcnow()
 
-        item['last_post'] = dateparser.parse(board.xpath(
-            'descendant::b[contains(text(), "Last post")]/..'
-        ).xpath('normalize-space()').extract_first().split('on ')[-1],
-                                             settings={'TIMEZONE': 'UTC'})
+        item['last_post'] = datetime.utcfromtimestamp(0)
 
-        return self.verify_date(item, 'last_post')
+        return item
 
     def parse_thread(self, response, thread):
         item = Thread()
-        item['title'] = thread.xpath(
-            'descendant::span[starts-with(@id, "msg")]/a/text()'
-        ).extract_first()
+        item['title'] = thread.get('sub')
+        if item['title'] is None:
+            item['title'] = ''
 
-        item['url'] = thread.xpath(
-            'descendant::span[starts-with(@id, "msg")]/a/@href'
-        ).extract_first()
+        item['id'] = thread['no']
 
-        item['id'] = item['url'].split('topic=')[1].split('.')[0]
-
-        item['author'] = thread.xpath(
-            'descendant::a[starts-with(@title, "View")]/text()'
-        ).extract_first()
+        item['author'] = thread['id']
 
         item['board'] = response.meta.get('board')
 
+        item['url'] = ('http://a.4cdn.org/'
+                       '{board_id}/thread/{thread_id}.json').format(
+                           board_id=item['board'], thread_id=item['id'])
+
         item['last_scraped'] = datetime.utcnow()
 
-        item['last_post'] = dateparser.parse(thread.xpath(
-            'descendant::span[@class="smalltext"]'
-        ).xpath('normalize-space()').extract_first().split(' by')[0],
-                                             settings={'TIMEZONE': 'UTC'})
+        item['last_post'] = datetime.utcfromtimestamp(thread['last_modified'])
 
-        return self.verify_date(item, 'last_post')
+        return item
 
     def parse_comment(self, response, comment):
+
         item = Comment()
-        item['author'] = comment.xpath(
-            'descendant::td[@class="poster_info"]/b/a/text()'
-        ).extract_first()
+        item['author'] = comment['id']
+        item['text'] = Selector(text=comment['com']).xpath(
+            'normalize-space()').extract_first()
 
-        item['text'] = comment.xpath(
-            'descendant::div[@class="post"]'
-        ).xpath('normalize-space()').extract_first()
+        item['timestamp'] = datetime.utcfromtimestamp(comment['time'])
 
-        item['timestamp'] = dateparser.parse(comment.xpath(
-            'descendant::table/descendant::div[@class="smalltext"]'
-        ).xpath('normalize-space()').extract_first().split('Last')[0],
-                                             settings={'TIMEZONE': 'UTC'})
-
-        item['id'] = comment.xpath(
-            'descendant::div[starts-with(@id, "subject")]/@id'
-        ).extract_first().split('_')[-1]
+        item['id'] = comment['no']
 
         item['board'] = response.meta.get('board')
 
         item['thread'] = response.meta.get('thread')
 
-        return self.verify_date(item, 'timestamp')
-
-    def verify_date(self, item, time_item):
-        # Handle race condition - post may have been retrieved before
-        # midnight but processed here shortly after midnight resulting in
-        # the translation of 'Today' to datetime being off by one day
-
-        if item[time_item] > datetime.utcnow():
-            item[time_item] = item[time_item].shift(days=-1)
-
         return item
 
     def open_mongodb(self):
-
         self.client = pymongo.MongoClient(
             host=settings.get('MONGO_HOST'),
             port=settings.get('MONGO_PORT'),
             username=settings.get('MONGO_USERNAME'),
             password=settings.get('MONGO_PASSWORD'),
-            authSource=settings.get('MONGO_DATABASE'),
+            authSource=settings.get('MONGO_AUTHORIZATION_DATABASE'),
         )
 
-        self.db = self.client[settings.get('MONGO_DATABASE')]
+        self.db = self.client[self.name]
 
     def close_mongodb(self):
         try:
