@@ -1,17 +1,15 @@
 from scrapy import Spider
 from scrapy.selector import Selector
-from scrapy.http import Request
 from crawl.items import Board, Thread, Comment
 from datetime import datetime
-import dateparser
 from scrapy.conf import settings
 import pymongo
 import json
-import os
+
 
 class FourChanSpider(Spider):
-    name = "fourchan"
-    allowed_domains = ["a.4cdn.org"]
+    name = 'fourchan'
+    allowed_domains = ['a.4cdn.org']
     start_urls = [
         'http://a.4cdn.org/boards.json',
     ]
@@ -80,33 +78,6 @@ class FourChanSpider(Spider):
             return []
         else:
             return list
-
-    # def get_boards(self, response):
-    #     if 'boards' in response.url:
-    #         boards = json.loads(response.text)['boards']
-    #     else:
-    #         boards = None
-    #     return boards
-    #
-    # def get_threads(self, response):
-    #     if 'catalog' in response.url:
-    #         threads = json.loads(response.text)['threads']
-    #     else:
-    #         threads = None
-    #     return threads
-    #
-    # def get_comments(self, response):
-    #     file_name = os.path.splitext(os.path.basename(response.url))[0]
-    #     try:
-    #         thread = int(file_name)
-    #     except ValueError:
-    #         thread = None
-    #
-    #     if thread:
-    #         comments = json.loads(response.text)['posts']
-    #     else:
-    #         comments = None
-    #     return comments
 
     def parse_board(self, response, board):
 

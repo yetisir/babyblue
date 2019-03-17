@@ -8,8 +8,8 @@ import pymongo
 
 
 class BitcoinTalkSpider(Spider):
-    name = "bitcointalk"
-    allowed_domains = ["bitcointalk.org"]
+    name = 'bitcointalk'
+    allowed_domains = ['bitcointalk.org']
     start_urls = [
         'http://bitcointalk.org/',
     ]
