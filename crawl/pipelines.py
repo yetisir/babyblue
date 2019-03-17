@@ -38,13 +38,17 @@ class MongoPipeline(object):
         doc = dict(item)
         spec = {'id': doc['id']}
         collection = self.collections.get(type(item))
+        spider.db[collection].update(spec, doc, True)
+        return item
 
-        if collection == "comments":
-            db_item = collection.find_one(spec)
-            if not db_item:
-                collection.insert_one(doc)
-                return item
-
-        else:
-            spider.db[collection].update(spec, doc, True)
-            return item
+        # db_item = spider.db[collection].find_one(spec)
+        #
+        # if collection == "comments":
+        #     if not db_item:
+        #         spider.db[collection].insert_one(doc)
+        #         return item
+        # else:
+        #     #TODO: check last_post_date
+        #     if db_item.get('last_post') != item.get('last_post'):
+        #         spider.db[collection].update(spec, doc, True)
+        #         return item

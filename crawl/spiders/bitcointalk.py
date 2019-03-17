@@ -1,6 +1,5 @@
 from scrapy import Spider
 from scrapy.selector import Selector
-from scrapy.http import Request
 from crawl.items import Board, Thread, Comment
 from datetime import datetime
 import dateparser
@@ -16,7 +15,7 @@ class BitcoinTalkSpider(Spider):
     ]
 
     boards_to_crawl = [
-        'b1',
+        'b138',
     ]
 
     def __init__(self):
@@ -26,13 +25,6 @@ class BitcoinTalkSpider(Spider):
         self.close_mongodb()
 
     def parse(self, response):
-
-        # site_identifier = Selector(response).xpath(
-        #     '//td[@class="catbg"]/span/text()'
-        # ).extract_first()
-        #
-        # if site_identifier != 'Bitcoin Forum':
-        #     yield Request(url=response.url, dont_filter=True)
 
         boards = Selector(response).xpath(
             '//tr/td/b/a[starts-with(@name, "b")]/../../..'
@@ -47,24 +39,23 @@ class BitcoinTalkSpider(Spider):
         )
 
         next_page = Selector(response).xpath(
-            '//span[@class="prevnext"]/*[text()[.="»"]]/@href'
-        ).extract_first()
+            '//span[@class="prevnext"]/child::*'
+        )
 
         for board in boards:
 
             item = self.parse_board(response, board)
 
-            cached_board = self.db.boards.find_one({'id': item['id']})
-
-            yield item
+            db_board = self.db.boards.find_one({'id': item['id']})
 
             scrape_board = False
-            if not cached_board:
+            if not db_board:
                 scrape_board = True
-            elif cached_board['last_scraped'] < item['last_post']:
+            elif db_board['last_scraped'] < item['last_post']:
                 scrape_board = True
 
             if scrape_board:
+                yield item
                 yield response.follow(
                     item['url'],
                     callback=self.parse,
@@ -73,26 +64,24 @@ class BitcoinTalkSpider(Spider):
                     }
                 )
 
+        updated_threads = False
         if response.meta.get('board') in self.boards_to_crawl:
-            updated_threads = False
             for thread in threads:
 
                     item = self.parse_thread(response, thread)
 
-                    cached_thread = self.db.threads.find_one(
+                    db_thread = self.db.threads.find_one(
                         {'id': item['id']}
                     )
 
-                    yield item
-
                     scrape_thread = False
-                    if not cached_thread:
+                    if not db_thread:
                         scrape_thread = True
-                    elif cached_thread['last_scraped'] < item['last_post']:
+                    elif db_thread['last_scraped'] < item['last_post']:
                         scrape_thread = True
 
                     if scrape_thread:
-
+                        yield item
                         updated_threads = True
 
                         yield response.follow(
@@ -105,28 +94,45 @@ class BitcoinTalkSpider(Spider):
                         )
 
             comment_thread = response.meta.get('thread')
-            max_db_comment_id_document = self.db.comments.find_one(
+            most_recent_db_comment = self.db.comments.find_one(
                 filter={'thread': comment_thread},
-                sort=[('id', pymongo.DESCENDING)]
+                sort=[('timestamp', pymongo.DESCENDING)]
             )
 
-            if max_db_comment_id_document is not None:
-                max_db_comment_id = max_db_comment_id_document['id']
+            if most_recent_db_comment is not None:
+                latest_db_timestamp = most_recent_db_comment['timestamp']
             else:
-                max_db_comment_id = 0
+                latest_db_timestamp = datetime.utcfromtimestamp(0)
 
-            response_comment_ids = [0]
+            oldest_comment_timestamp = datetime.utcfromtimestamp(0)
             for comment in comments:
                 item = self.parse_comment(response, comment)
-                response_comment_ids.append(int(item['id']))
-                yield item
+                comment_id = item['id']
+                oldest_comment_timestamp = min(
+                    oldest_comment_timestamp, item['timestamp'])
 
-            if next_page:
+                db_comment = self.db.comments.find_one(
+                    {'id': comment_id}
+                )
+
+                if not db_comment:
+                    yield item
+
+            prevnext_links = next_page.xpath('child::text()')
+            next_page_link = None
+            for i, prevnext_text in enumerate(prevnext_links.extract()):
+
+                if ord(prevnext_text) == 187:
+                    next_page_link = next_page[i].xpath(
+                        '@href'
+                    ).extract_first()
+
+            if next_page_link:
                 if (updated_threads or
-                        min(response_comment_ids) > int(max_db_comment_id)):
+                        oldest_comment_timestamp > latest_db_timestamp):
 
                     yield response.follow(
-                        next_page,
+                        next_page_link,
                         callback=self.parse,
                         meta=response.meta
                     )
@@ -191,6 +197,9 @@ class BitcoinTalkSpider(Spider):
         item['author'] = comment.xpath(
             'descendant::td[@class="poster_info"]/b/a/text()'
         ).extract_first()
+
+        if not item['author']:
+            item['author'] = 'Guest'
 
         item['text'] = comment.xpath(
             'descendant::div[@class="post"]'
