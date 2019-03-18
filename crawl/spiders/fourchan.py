@@ -9,6 +9,7 @@ import json
 
 class FourChanSpider(Spider):
     name = 'fourchan'
+    target_database = 'fourchan'
     allowed_domains = ['a.4cdn.org']
     start_urls = [
         'http://a.4cdn.org/boards.json',
@@ -146,7 +147,7 @@ class FourChanSpider(Spider):
             authSource=settings.get('MONGO_AUTHORIZATION_DATABASE'),
         )
 
-        self.db = self.client[self.name]
+        self.db = self.client[self.target_database]
 
     def close_mongodb(self):
         try:

@@ -9,6 +9,7 @@ import pymongo
 
 class BitcoinTalkSpider(Spider):
     name = 'bitcointalk'
+    target_database = 'bitcointalk'
     allowed_domains = ['bitcointalk.org']
     start_urls = [
         'http://bitcointalk.org/',
@@ -236,7 +237,7 @@ class BitcoinTalkSpider(Spider):
             authSource=settings.get('MONGO_AUTHORIZATION_DATABASE'),
         )
 
-        self.db = self.client[self.name]
+        self.db = self.client[self.target_database]
 
     def close_mongodb(self):
         try:
