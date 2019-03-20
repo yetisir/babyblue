@@ -1,6 +1,5 @@
 from scrapy import Spider
-from scrapy.selector import Selector
-from crawl.items import Board, Thread, Comment
+from crawl.items import Thread, Comment
 from datetime import datetime
 from scrapy.conf import settings
 import pymongo
@@ -16,9 +15,6 @@ class ArchivedMoeSpider(Spider):
         'http://archived.moe',
     ]
 
-    # https://archived.moe/_/api/chan/thread/?board=biz&num=904256
-    # https://github.com/FoolCode/FoolFuuka-docs/blob/master/code_guide/documentation/api.rst
-
     boards_to_crawl = [
         'biz',
     ]
@@ -33,7 +29,7 @@ class ArchivedMoeSpider(Spider):
         self.close_mongodb()
 
     def parse_response(self, response):
-        #TODO: better check
+        # TODO: better check
         try:
             return json.loads(response.text)
         except JSONDecodeError:
@@ -46,8 +42,6 @@ class ArchivedMoeSpider(Spider):
             for board in self.boards_to_crawl:
                 board_url = self.board_api_url.format(
                     base_url=self.start_urls[0], board=board, page=1)
-                print('yololloylyoylyololololololool')
-                print(board_url)
                 yield response.follow(
                     board_url,
                     callback=self.parse,
@@ -115,6 +109,9 @@ class ArchivedMoeSpider(Spider):
 
         for comment in unparsed_comments:
             comments.append(self.parse_comment(response, comment))
+
+        comment_timestamps = [comment['timestamp'] for comment in comments]
+        item['last_post'] = max(comment_timestamps)
 
         return item, comments
 

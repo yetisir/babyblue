@@ -56,8 +56,6 @@ class FourChanSpider(Spider):
         if response.meta.get('board') in self.boards_to_crawl:
 
             threads = self.check_list(response_data.get('threads'))
-            print('*********************************************')
-            print(len(threads))
             for thread in threads:
                 item = self.parse_thread(response, thread)
                 yield item
