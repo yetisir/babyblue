@@ -22,8 +22,11 @@ class ArchivedMoeSpider(Spider):
     board_api_url = '{base_url}/_/api/chan/index/?board={board}&page={page}'
     thread_api_url = '{base_url}/_/api/chan/thread/?board={board}&num={thread}'
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super(ArchivedMoeSpider, self).__init__(*args, **kwargs)
         self.open_mongodb()
+        if not hasattr(self, 'page'):
+            self.page = 0
 
     def __del__(self):
         self.close_mongodb()
@@ -41,11 +44,11 @@ class ArchivedMoeSpider(Spider):
         if response_data is None:
             for board in self.boards_to_crawl:
                 board_url = self.board_api_url.format(
-                    base_url=self.start_urls[0], board=board, page=1)
+                    base_url=self.start_urls[0], board=board, page=self.page)
                 yield response.follow(
                     board_url,
                     callback=self.parse,
-                    meta={'board': board, 'page': 1}
+                    meta={'board': board, 'page': self.page}
                 )
 
         else:

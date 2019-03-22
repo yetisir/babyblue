@@ -19,8 +19,13 @@ class BitcoinTalkSpider(Spider):
         'b67',
     ]
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super(BitcoinTalkSpider, self).__init__(*args, **kwargs)
         self.open_mongodb()
+        if not hasattr(self, 'archive'):
+            self.archive = False
+        else:
+            self.archive = bool(self.archive)
 
     def __del__(self):
         self.close_mongodb()
@@ -81,7 +86,7 @@ class BitcoinTalkSpider(Spider):
 
                 db_comment = self.db.comments.find_one({'id': comment_id})
 
-                if not db_comment:
+                if not db_comment or self.archive:
                     yield item
 
             # handle next page
@@ -90,8 +95,9 @@ class BitcoinTalkSpider(Spider):
             next_page_link = self.get_next_page_link(next_page)
 
             if next_page_link:
-                if (updated_threads or
-                        oldest_comment_timestamp > latest_db_timestamp):
+                if self.archive or (updated_threads or
+                                    oldest_comment_timestamp >
+                                    latest_db_timestamp):
 
                     yield response.follow(
                         next_page_link,
@@ -125,15 +131,17 @@ class BitcoinTalkSpider(Spider):
             return latest_db_timestamp
 
     def valid_item(self, item, collection):
+        if self.archive:
+            return True
+
         db_thread = collection.find_one({'id': item['id']})
 
-        valid = False
         if not db_thread:
-            valid = True
+            return True
         elif db_thread['last_scraped'] < item['last_post']:
-            valid = True
+            return True
 
-        return valid
+        return False
 
     def parse_board(self, response, board):
 

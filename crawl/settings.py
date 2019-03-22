@@ -29,7 +29,7 @@ NEWSPIDER_MODULE = 'crawl.spiders'
 # Configure a delay for requests for the same website (default: 0)
 # See https://doc.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-DOWNLOAD_DELAY = 0
+DOWNLOAD_DELAY = 1
 # The download delay setting will honor only one of:
 #CONCURRENT_REQUESTS_PER_DOMAIN = 16
 CONCURRENT_REQUESTS_PER_IP = 16
@@ -80,7 +80,7 @@ ITEM_PIPELINES = {
    'crawl.pipelines.MongoPipeline': 300,
 }
 
-MONGO_HOST = 'eggs.grumpyyeti.com'
+MONGO_HOST = passwords.mongodb['target']
 MONGO_PORT = 27017
 MONGO_AUTHORIZATION_DATABASE = 'admin'
 MONGO_USERNAME = passwords.mongodb['username']
@@ -107,3 +107,6 @@ AUTOTHROTTLE_DEBUG = True
 #HTTPCACHE_DIR = 'httpcache'
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
+
+REDDIT_API_USERNAME = passwords.reddit_api['username']
+REDDIT_API_PASSWORD = passwords.reddit_api['password']
