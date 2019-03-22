@@ -27,6 +27,8 @@ class ArchivedMoeSpider(Spider):
         self.open_mongodb()
         if not hasattr(self, 'page'):
             self.page = 0
+        else:
+            self.page = int(self.page)
 
     def __del__(self):
         self.close_mongodb()
