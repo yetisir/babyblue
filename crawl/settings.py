@@ -24,53 +24,51 @@ NEWSPIDER_MODULE = 'crawl.spiders'
 # ROBOTSTXT_OBEY = True
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
-#CONCURRENT_REQUESTS = 32
+# CONCURRENT_REQUESTS = 32
 
 # Configure a delay for requests for the same website (default: 0)
 # See https://doc.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
 DOWNLOAD_DELAY = 0
 # The download delay setting will honor only one of:
-#CONCURRENT_REQUESTS_PER_DOMAIN = 16
+# CONCURRENT_REQUESTS_PER_DOMAIN = 16
 CONCURRENT_REQUESTS_PER_IP = 16
 
 # Disable cookies (enabled by default)
-#COOKIES_ENABLED = False
+# COOKIES_ENABLED = False
 
 # Disable Telnet Console (enabled by default)
-#TELNETCONSOLE_ENABLED = False
+# TELNETCONSOLE_ENABLED = False
 
 # Override the default request headers:
-#DEFAULT_REQUEST_HEADERS = {
+# DEFAULT_REQUEST_HEADERS = {
 #   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 #   'Accept-Language': 'en',
-#}
+# }
 
 # Enable or disable spider middlewares
 # See https://doc.scrapy.org/en/latest/topics/spider-middleware.html
-#SPIDER_MIDDLEWARES = {
+# SPIDER_MIDDLEWARES = {
 #    'scrapy_tutorial.middlewares.ScrapyTutorialSpiderMiddleware': 543,
-#}
+# }
 
 # Enable or disable downloader middlewares
 # See https://doc.scrapy.org/en/latest/topics/downloader-middleware.html
-# DOWNLOADER_MIDDLEWARES = {
-#     'rotating_proxies.middlewares.RotatingProxyMiddleware': 610,
-#     'rotating_proxies.middlewares.BanDetectionMiddleware': 620,
-# }
-
+DOWNLOADER_MIDDLEWARES = {
+    'rotating_proxies.middlewares.RotatingProxyMiddleware': 610,
+    'rotating_proxies.middlewares.BanDetectionMiddleware': 620,
+}
 
 
 proxy_list_url = 'https://www.proxy-list.download/api/v1/get?type=http&anon=transparent'
 # proxy_list_url = 'http://pubproxy.com/api/proxy?format=txt&type=http&limit=20&last_check=1'
-ROTATING_PROXY_LIST = requests.get(proxy_list_url).content.decode('UTF-8').split()
-
-
+ROTATING_PROXY_LIST = requests.get(
+   proxy_list_url).content.decode('UTF-8').split()
 
 
 # Enable or disable extensions
 # See https://doc.scrapy.org/en/latest/topics/extensions.html
-#EXTENSIONS = {
+# EXTENSIONS = {
 #    'scrapy.extensions.telnet.TelnetConsole': None,
 #}
 
@@ -89,11 +87,11 @@ MONGO_PASSWORD = passwords.mongodb['password']
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://doc.scrapy.org/en/latest/topics/autothrottle.html
-AUTOTHROTTLE_ENABLED = True
+AUTOTHROTTLE_ENABLED = False
 # The initial download delay
-AUTOTHROTTLE_START_DELAY = 1
+AUTOTHROTTLE_START_DELAY = 0
 # The maximum download delay to be set in case of high latencies
-AUTOTHROTTLE_MAX_DELAY = 3
+AUTOTHROTTLE_MAX_DELAY = 0
 # The average number of requests Scrapy should be sending in parallel to
 # each remote server
 AUTOTHROTTLE_TARGET_CONCURRENCY = 1
@@ -102,8 +100,19 @@ AUTOTHROTTLE_DEBUG = True
 
 # Enable and configure HTTP caching (disabled by default)
 # See https://doc.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
+<<<<<<< Updated upstream
 #HTTPCACHE_ENABLED = True
 #HTTPCACHE_EXPIRATION_SECS = 0
 #HTTPCACHE_DIR = 'httpcache'
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
+=======
+# HTTPCACHE_ENABLED = True
+# HTTPCACHE_EXPIRATION_SECS = 0
+# HTTPCACHE_DIR = 'httpcache'
+# HTTPCACHE_IGNORE_HTTP_CODES = []
+# HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
+
+# REDDIT_API_USERNAME = passwords.reddit['username']
+# REDDIT_API_PASSWORD = passwords.reddit['password']
+>>>>>>> Stashed changes
