@@ -14,6 +14,13 @@ from psaw import PushshiftAPI
 import requests
 f = requests.get('https://www.reddit.com/r/bitcoin/search.json?q=oop')
 print(f.content)
+f = requests.get('https://api.pushshift.io/reddit/search/submission/?subreddit=cryptocurrency&size=500')
+
+https://api.pushshift.io/reddit/submission/comment_ids/6uey5x
+
+https://api.pushshift.io/reddit/comment/search?ids=dlrezc8,dlrawgw,dlrhbkq
+
+https://www.reddit.com/r/funny/comments.json?limit=100
 # submission = reddit.submission(id='3g1jfi')
 # submission.comments.replace_more(limit=None)
 #
@@ -30,20 +37,21 @@ import json
 from json import JSONDecodeError
 
 
-class PushShiftSpider(Spider):
-    name = 'pushshift'
+class RedditSpider(Spider):
+    name = 'reddit'
     target_database = 'reddit'
-    allowed_domains = ['api.pushift.io']
-    start_urls = [
-        'http://pushift.io',
+    allowed_domains = ['reddit.com']
+    start_urls_fmt = [
+        'https://www.reddit.com/r/{subreddit}/new.json?limit=100',
+        'https://www.reddit.com/r/{subreddit}/comments.json?limit=100',
     ]
 
     boards_to_crawl = [
         'cryptocurrency',
     ]
 
-    board_api_url = '{base_url}/_/api/chan/index/?board={board}&page={page}'
-    thread_api_url = '{base_url}/_/api/chan/thread/?board={board}&num={thread}'
+    start_urls = [start_url.format(board) for (
+        start_url in start_urls_fmt for board in boards_to_crawl)]
 
     def __init__(self):
         self.open_mongodb()
@@ -51,15 +59,8 @@ class PushShiftSpider(Spider):
     def __del__(self):
         self.close_mongodb()
 
-    def parse_response(self, response):
-        # TODO: better check
-        try:
-            return json.loads(response.text)
-        except JSONDecodeError:
-            return None
-
     def parse(self, response):
-        response_data = self.parse_response(response)
+        response_data = json.loads(response.text)
 
         if response_data is None:
             for board in self.boards_to_crawl:
