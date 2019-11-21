@@ -31,7 +31,7 @@ NEWSPIDER_MODULE = 'crawl.spiders'
 # See also autothrottle settings and docs
 DOWNLOAD_DELAY = 0
 # The download delay setting will honor only one of:
-# CONCURRENT_REQUESTS_PER_DOMAIN = 16
+CONCURRENT_REQUESTS_PER_DOMAIN = 16
 CONCURRENT_REQUESTS_PER_IP = 16
 
 # Disable cookies (enabled by default)
@@ -54,16 +54,16 @@ CONCURRENT_REQUESTS_PER_IP = 16
 
 # Enable or disable downloader middlewares
 # See https://doc.scrapy.org/en/latest/topics/downloader-middleware.html
-DOWNLOADER_MIDDLEWARES = {
-    'rotating_proxies.middlewares.RotatingProxyMiddleware': 610,
-    'rotating_proxies.middlewares.BanDetectionMiddleware': 620,
-}
+# DOWNLOADER_MIDDLEWARES = {
+#     'rotating_proxies.middlewares.RotatingProxyMiddleware': 610,
+#     'rotating_proxies.middlewares.BanDetectionMiddleware': 620,
+# }
 
 
 proxy_list_url = 'https://www.proxy-list.download/api/v1/get?type=http&anon=transparent'
 # proxy_list_url = 'http://pubproxy.com/api/proxy?format=txt&type=http&limit=20&last_check=1'
 ROTATING_PROXY_LIST = requests.get(
-   proxy_list_url).content.decode('UTF-8').split()
+   proxy_list_url).content.decode('UTF-8').split()[:10]
 
 
 # Enable or disable extensions
@@ -87,14 +87,14 @@ MONGO_PASSWORD = passwords.mongodb['password']
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://doc.scrapy.org/en/latest/topics/autothrottle.html
-AUTOTHROTTLE_ENABLED = False
+AUTOTHROTTLE_ENABLED = True
 # The initial download delay
-AUTOTHROTTLE_START_DELAY = 0
+AUTOTHROTTLE_START_DELAY = 1
 # The maximum download delay to be set in case of high latencies
-AUTOTHROTTLE_MAX_DELAY = 0
+AUTOTHROTTLE_MAX_DELAY = 0.25
 # The average number of requests Scrapy should be sending in parallel to
 # each remote server
-AUTOTHROTTLE_TARGET_CONCURRENCY = 1
+AUTOTHROTTLE_TARGET_CONCURRENCY = 16
 # Enable showing throttling stats for every response received:
 AUTOTHROTTLE_DEBUG = True
 
