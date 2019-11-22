@@ -26,7 +26,7 @@ class ArchivedMoeSpider(Spider):
         super(ArchivedMoeSpider, self).__init__(*args, **kwargs)
         self.open_mongodb()
         if not hasattr(self, 'page'):
-            self.page = 0
+            self.page = 1
         else:
             self.page = int(self.page)
 
