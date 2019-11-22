@@ -70,7 +70,8 @@ class FourChanSpider(Spider):
             comments = self.check_list(response_data.get('posts'))
             for comment in comments:
                 item = self.parse_comment(response, comment)
-                yield item
+                if item is not None:
+                    yield item
 
     def check_list(self, list):
         if list is None:
@@ -120,7 +121,8 @@ class FourChanSpider(Spider):
         return item
 
     def parse_comment(self, response, comment):
-
+        if comment.get('com') is None:
+            return None
         item = Comment()
         item['author'] = comment['id']
         item['text'] = Selector(text=comment['com']).xpath(
