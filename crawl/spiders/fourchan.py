@@ -20,6 +20,7 @@ class FourChanSpider(Spider):
     ]
 
     def __init__(self):
+        super().__init__(*args, **kwargs)
         self.open_mongodb()
 
     def __del__(self):

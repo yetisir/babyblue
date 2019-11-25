@@ -23,7 +23,7 @@ class ArchivedMoeSpider(Spider):
     thread_api_url = '{base_url}/_/api/chan/thread/?board={board}&num={thread}'
 
     def __init__(self, *args, **kwargs):
-        super(ArchivedMoeSpider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.open_mongodb()
         if not hasattr(self, 'page'):
             self.page = 1

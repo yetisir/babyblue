@@ -20,7 +20,7 @@ class BitcoinTalkSpider(Spider):
     ]
 
     def __init__(self, *args, **kwargs):
-        super(BitcoinTalkSpider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.open_mongodb()
         if not hasattr(self, 'archive'):
             self.archive = False
