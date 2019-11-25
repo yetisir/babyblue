@@ -4,7 +4,6 @@ from datetime import datetime
 from scrapy.conf import settings
 import pymongo
 import json
-from json import JSONDecodeError
 
 
 class RedditSpider(Spider):
@@ -39,6 +38,11 @@ class RedditSpider(Spider):
     reddit_aubreddit_about_url = (
         'http://www.reddit.com/r/{subreddit}/about')
 
+    custom_settings = {
+        'AUTOTHROTTLE_ENABLED': False,
+        'DOWNLOAD_DELAY': 100/200.0,
+    }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.open_mongodb()
@@ -51,7 +55,6 @@ class RedditSpider(Spider):
             board_url = self.start_pushshift_board_threads_url.format(
                 subreddit=board)
             board_item = self.parse_board(board)
-            import pdb; pdb.set_trace()
             yield response.follow(
                 board_url,
                 callback=self.threads,
@@ -62,7 +65,6 @@ class RedditSpider(Spider):
 
     def threads(self, response):
 
-        board = response.meta.get('board')
         threads = json.loads(response.text)['data']
         min_timestamp = float('inf')
         for i, thread in enumerate(threads):
@@ -85,20 +87,26 @@ class RedditSpider(Spider):
                 }
             )
 
-            if len(threads) != 0:
-                board_url = self.pushshift_board_threads_url.format(
-                    subreddit=board['name'], before_timestamp=timestamp)
-                board_item = self.parse_board(board)
-                yield response.follow(
-                    board_url,
-                    callback=self.threads,
-                    meta={
-                        'board': board_item,
-                        'add_board': False}
-                )
+        if len(threads) != 0:
+            board_item = response.meta.get('board')
+            board_url = self.pushshift_board_threads_url.format(
+                subreddit=board_item['name'],
+                before_timestamp=timestamp)
+
+            yield response.follow(
+                board_url,
+                callback=self.threads,
+                meta={
+                    'board': board_item,
+                    'add_board': False}
+            )
 
     def comment_ids(self, response):
         comment_ids = json.loads(response.text)['data']
+        if response.meta['add_board'] is True:
+            add_board = response.meta['add_board']
+        else:
+            add_board = False
 
         for i in range(0, len(comment_ids), 500):
             comment_string = ','.join(comment_ids[i:i+500])
@@ -112,23 +120,25 @@ class RedditSpider(Spider):
                     'board': response.meta['board'],
                     'thread': response.meta['thread'],
                     'index': i,
-                    'add_board': response.meta['add_board'],
+                    'add_board': add_board,
                 }
             )
 
     def comments(self, response):
         comment_timestamps = []
         comments = json.loads(response.text)['data']
+
         for comment in comments:
             item = self.parse_comment(comment, response.meta['thread']['id'])
-            comments.append(item['timestamp'])
+
+            comment_timestamps.append(item['timestamp'])
             yield item
 
         if response.meta.get('index') == 0:
             thread_item = response.meta.get('thread')
             thread_item['last_post'] = max(comment_timestamps)
             yield thread_item
-
+            
             if response.meta['add_board'] is True:
                 board_item = response.meta('board')
                 board_item['last'] = thread_item['last_post']
