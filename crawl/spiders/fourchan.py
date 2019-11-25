@@ -19,7 +19,7 @@ class FourChanSpider(Spider):
         'biz',
     ]
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.open_mongodb()
 

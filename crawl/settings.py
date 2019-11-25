@@ -106,5 +106,5 @@ AUTOTHROTTLE_DEBUG = True
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
 
-REDDIT_API_USERNAME = passwords.reddit['username']
-REDDIT_API_PASSWORD = passwords.reddit['password']
+REDDIT_API_USERNAME = passwords.reddit_api['username']
+REDDIT_API_PASSWORD = passwords.reddit_api['password']
