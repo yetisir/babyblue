@@ -3,8 +3,11 @@ from scrapy.selector import Selector
 from crawl.items import Board, Thread, Comment
 from datetime import datetime
 import dateparser
-from scrapy.conf import settings
+from scrapy.utils.project import get_project_settings
 import pymongo
+
+settings = get_project_settings()
+
 
 
 class BitcoinTalkSpider(Spider):

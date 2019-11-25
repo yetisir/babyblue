@@ -2,9 +2,12 @@ from scrapy import Spider
 from scrapy.selector import Selector
 from crawl.items import Board, Thread, Comment
 from datetime import datetime
-from scrapy.conf import settings
+from scrapy.utils.project import get_project_settings
 import pymongo
 import json
+
+settings = get_project_settings()
+
 
 
 class FourChanSpider(Spider):
